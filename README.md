@@ -2,7 +2,7 @@
 
 ## Set-up
 
-Use `uv`, together with the preferred Pytorch version (CPU-only or CUDA), to reproduce our Python environment:
+Use [`uv`](https://docs.astral.sh/uv/), together with the preferred Pytorch version (CPU-only or CUDA), to reproduce our Python environment:
 
 ```sh
 uv sync --extra=cpu
