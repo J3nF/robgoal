@@ -599,3 +599,6 @@ tags
 
 # Devcontainer
 .devcontainer
+
+# Isambard SSH tool
+clifton
