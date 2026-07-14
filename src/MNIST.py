@@ -1,4 +1,7 @@
 # %%
+import ssl
+
+import certifi
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,6 +10,11 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Some systems' OpenSSL trust store is missing the CA that signs the MNIST
+# mirror's cert, causing CERTIFICATE_VERIFY_FAILED on download. Use certifi's
+# bundle instead, which is kept up to date independently of the OS.
+ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
 
 
 # %%
