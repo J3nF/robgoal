@@ -1,34 +1,26 @@
 # Lab book: autapsic-inhibition MNIST tests
 
-## Context
+Lab book recording run learning experiments based on *autapsic inhibition AI (ai2 )* networks, as sketched out in `Mini_project_meta_continual_learning.md`.
 
-`Mini_project_meta_continual_learning.md` (2026-07-14, "Current Plan") lists MNIST
-experiments run/planned but doesn't fully specify them: two baselines (CNN, FCNN)
-and "*some* autapsic NN implementation" with three candidate formulas, which the doc
-itself flags as unresolved ("who knows what this means as of now"). This lab book
-turns that prose into an executable, falsifiable spec: what the tests are and how
-to implement them in PyTorch.
+## Considerations and resolved ambiguities
 
-## Considerations (resolved ambiguities)
+1. **What does `t` refer to for a static-image classifier?**
+  Unroll each forward pass over `T` fixed internal steps, feeding the same input every step.
+  This is done to:
+  - Allow dynamics to settle,
+  - Enable autapsic inhibition to take place in the first place.
+  Note how, for `T=1`, ai2 networks reduce to a plain layer.
 
-1. **What counts as a "test"?** Counted the "Have run MNIST experiments for"
-   bullets: CNN, FCNN, and 3 autapsic formulas — 2 architecture controls + 3
-   autapsic formulas, all under the incremental-digit protocol from 2026-07-06.
+>>> TODO FROM HERE ONWARDS
 
-2. **What does `t` vs `t-1` mean for a static-image classifier?** No natural "time"
-   exists in one MNIST feedforward pass. Resolved: unroll each forward pass over a
-   fixed `T` internal steps, feeding the same input every step (settling dynamics),
-   matching the "performs slightly better than simple RNNs" comparison in the 07-06
-   lit review. `T=1` must degenerate to a plain layer — the built-in sanity check.
-
-3. **What does the bias-difference variant (`b_i(t) = b_i(t-1) - b_i(t-1)`) mean?**
+1. **What does the bias-difference variant (`b_i(t) = b_i(t-1) - b_i(t-1)`) mean?**
    A learned bias is a single constant, so a literal self-difference is degenerate.
    Resolved: `b_i` stays a fixed parameter; the *effective* bias at step `t` is
    `b_i` minus the inhibition signal from `t-1` (spike-frequency-adaptation-style
    self-inhibition through the bias) — the "implicit contribution to bias" in the
    notes.
 
-4. **Sigmoid vs. ReLU — why run both.** Sigmoid is bounded, matching the 07-14
+1. **Sigmoid vs. ReLU — why run both.** Sigmoid is bounded, matching the 07-14
    entropy motivation ("firing rates 0 and 1 waste information") and keeping
    `mult_gate`'s `(1 - y_prev)` a sensible gate, but vanishes over a `T`-step unroll
    and is inconsistent with the ReLU-based CNN control and rest of the project.
