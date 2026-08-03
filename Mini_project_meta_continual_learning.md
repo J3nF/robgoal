@@ -5,13 +5,13 @@
 - We think local information overload is the root of all our troubles (i.e. catastrophic forgetting).
 - We therefore wish to distribute information.
 - We think this overlaps with keeping neural networks flexible by pushing them out of minima somewhat^[This *somewhat* is doing some heavy lifting to hide my confusion!].
-    - A subset of this statement is that forgetting can be looked at as useful for our purposes.
-- We believe one way to this goal is to allow different neuronal behaviour given similar/same inputs.
+    - As a subset of this statement, we believe forgetting can be useful/necessary for robust learning.
+- To achieve this, we allow different neuronal behaviour given similar/same inputs.
 - Therefore, we wish to let network parts^[who knows what this means as of now] have self-recurrent, self-inhibiting connections.
     - As the Bio people scream right now, we wish to use *autapses*.
-- By "self-inhibiting", we hope for no single neurons to be solely responsible for elemental concepts.
-- Implication: Many neurons share important information.
-- Hypothesis: This diffuses information across the network. This diffusion tackles local information overloading. Voila.
+- By "self-inhibiting" neural outputs via autapses, we hope for no single neuron or layer to be solely responsible for critical features.
+- I.e.: Many neurons share important information.
+- Hypothesis: This diffuses information across the network, which tackles local information overloading. Voila.
 
 ## Meeting notes
 
@@ -22,9 +22,9 @@
 https://avalanche.continualai.org/ - Standard framework for CL.
 
 Take a look at the new folder "Theoretical works" and on the paper
-"When Meta-Learning Meets Online and Continual Learning: A Survey" under Meta Learning + Continual Learning. 
+"When Meta-Learning Meets Online and Continual Learning: A Survey" under Meta Learning + Continual Learning.
 
-I was reading a paper that is under review for NeurIPS and their idea on meta incremental learning is quite interesting. I've create a new latex in our overleaf under "meta_incremental_learning", take a look and let me know what do you think. 
+I was reading a paper that is under review for NeurIPS and their idea on meta incremental learning is quite interesting. I've create a new latex in our overleaf under "meta_incremental_learning", take a look and let me know what do you think.
 
 
 ### 2026-06-26
@@ -117,8 +117,8 @@ The coming week is going to include implementation!
     - On a different note, I had a fight with Isambard, who, for all practical purposes, has mostly been in a leaky-comatose state.
 - Some barebones entropy considerations took place. Basic argument:
     - Assuming neurons have finite """precision""" $p(x|y\neq x) \neq 0$, firing rates 0 and 1 waste information.
-    - Our artificial """inhibition""" push neurons away from $p\in \{0,1\}$. 
-    
+    - Our artificial """inhibition""" push neurons away from $p\in \{0,1\}$.
+
 #### Notes
 
 - Jens presented line of argument:
