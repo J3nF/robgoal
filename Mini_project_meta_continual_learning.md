@@ -153,12 +153,15 @@ The coming week is going to include implementation!
 - Have run MNIST experiments for
     - CNN
     - Fully connected NN
-    - *Some* autapsic NN implementation
-        - $y^\text{ai2}_i(t) = y_i(t) - y_i(t-1)$
-        - $b^\text{ai2}_i(t) = b_i(t) - b_i(t-1)$ (i.e., implement autapsis as implicit contribution to bias.)
-        - $y^\text{ai2}_i(t) = y_i(t)\cdot\left(1-y_i(t-1)\right)$
+    - 3 autapsic FCNN implementation.
+      $$\begin{align}
+        b^\text{ai2}_i(t) &= b_i(t) - b_i(t-1)\\
+        y^\text{ai2}_i(t) &= y_i(t) - y_i(t-1)\\
+        y^\text{ai2}_i(t) &= y_i(t)\cdot\left(1-y_i(t-1)\right)\\
+      \end{align}$$
+      with learning taking place between each timestep $t, (t-1)$.
     - (Future control group: Randomly switching subsets of neurons off.)
-    -  Learn subsets of all numbers, adding more and more after having learnt old set.
-        - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
-        - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
-            - Checking whether the worry is true is a pot. future TODO.
+  -  Learn subsets of all numbers, adding more and more after having learnt old set.
+    - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
+    - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
+        - Checking whether the worry is true is a pot. future TODO.
