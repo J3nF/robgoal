@@ -1,38 +1,76 @@
 # Lab book: autapsic-inhibition MNIST tests
 
-Lab book recording run learning experiments based on *autapsic inhibition AI (ai2 )* networks, as sketched out in `Mini_project_meta_continual_learning.md`.
+Lab book recording experiments with *autapsic inhibition AI (ai2 )* networks, as sketched out in `Mini_project_meta_continual_learning.md`.
+
+## Overall Plan
+
+- Notation:
+  - Most importantly, fancy project name: *autapses-inhibited AI (ai2)*.
+  - $i =$ neuron of concern;
+  - $\tilde\bullet =$ autapses-related parameter;
+  - $y_i =$ $i$'s unadapted output;
+  - $b_i =$ $i$'s bias.
+- Have run MNIST experiments for
+  - CNN
+  - Fully connected NN
+  - Some autapsic FCNN implementation:
+      $$\begin{align}
+        \tilde b_i(t)
+          &= b_i(t) - b_i(t-1)
+        \\
+        \tilde y_i(t)
+          &= y_i(t) - \tilde y_i(t-1)
+        \\
+        \tilde y_i(t)
+          &= y_i(t)\cdot\left(
+              1 - \tilde{y_i}(t-1)
+            \right) \nonumber\\
+          &= y_i(t) - \tilde y_i(t-1)y_i(t)
+      \end{align}$$
+    - Learning is to take place between "timesteps" $t, (t-1)$.
+      - Option A: Show the same input $N_t$ times to give the network time to converge, given ai2 adaptions;
+      - Option B: Implement memory
+    - Eq.s (2) and (3). are most promising;
+      - Only adapting the bias (eq. (1)), while being "minimally invasive" and easily interpretable, probably throws out too much information.
+      - Put another way, in order for eq. (1) to be sufficient, the bias needs to present a big part of the information a neuron holds, given inputs, which seems to be a rather big "if".
+  - (Future control group: Randomly switching subsets of neurons off.)
+  - Learn subsets of all numbers, adding more and more after having learnt old set.
+  - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
+    - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
+      - Checking whether the worry is true is a pot. future TODO.
 
 ## Considerations and resolved ambiguities
 
-1. **What does `t` refer to for a static-image classifier?**
-  Unroll each forward pass over `T` fixed internal steps, feeding the same input every step.
-  This is done to:
-  - Allow dynamics to settle,
-  - Enable autapsic inhibition to take place in the first place.
-  Note how, for `T=1`, ai2 networks reduce to a plain layer.
+### The meaning of `t` for static-image classifiers
 
->>> TODO FROM HERE ONWARDS
+Unroll each forward pass over `T` fixed internal steps, feeding the same input every step.
+This is done to:
 
-1. **What does the bias-difference variant (`b_i(t) = b_i(t-1) - b_i(t-1)`) mean?**
-   A learned bias is a single constant, so a literal self-difference is degenerate.
-   Resolved: `b_i` stays a fixed parameter; the *effective* bias at step `t` is
-   `b_i` minus the inhibition signal from `t-1` (spike-frequency-adaptation-style
-   self-inhibition through the bias) — the "implicit contribution to bias" in the
-   notes.
+- Allow dynamics to settle,
+- Enable autapsic inhibition to take place in the first place.
+Note how, for `T=1`, ai2 networks reduce to a plain layer.
 
-1. **Sigmoid vs. ReLU — why run both.** Sigmoid is bounded, matching the 07-14
-   entropy motivation ("firing rates 0 and 1 waste information") and keeping
-   `mult_gate`'s `(1 - y_prev)` a sensible gate, but vanishes over a `T`-step unroll
-   and is inconsistent with the ReLU-based CNN control and rest of the project.
-   Plain ReLU fixes that but breaks `mult_gate` (unbounded `y_prev` can push
-   `1 - y_prev` negative, sign-flipping rather than inhibiting) and can permanently
-   kill a unit (exact 0, exact zero gradient, no recovery) — the opposite of the
-   project's goal of keeping the network flexible.
+### Activation functions: $tanh$ and ReLU
+
+A priori, activation functions bound to $[0,1]$ match intuitions gained from biological spiking neural networks.
+Further, some ai2 schemes need boundedness to keep the adapted ouput in the activation function's domain (e.g., keeping $1-y(t-1)$ positive).
+
+Yet, contrasting bound activation functions with ReLU activations used by our controls result in an apples-to-oranges comparison, and, more troublingly, make some ai2 schemes converge to 0 during a rollout (again, consider $1-y(t-1)$).
+
+The latter incompatibility of positively bound activation function and some ai2 formulations offers two interpretations: That either the ai2 formulations or activation functions, since less generalisable / more prone, are a bad choice overall.
+
+I propose and run two different mitigation strategies:
+
+First, instead of Sigmoids, networks use a scaled $\tanh$ activation functions.
+While this keeps ouputs in the same domain, inhibition may still make neural outputs converge to 0.
+
+The second approach combines ReLU activation with $\tanh$-gated inhibition, trying to ease comparability to ReLU structures while allowing
 
    Resolution — run both as parallel axes:
-   - **`sigmoid`**: as originally designed, `y(t)` combines `sigmoid(Wx+b)` with
+
+- **`sigmoid`**: as originally designed, `y(t)` combines `sigmoid(Wx+b)` with
      `y(t-1)` directly (already bounded).
-   - **`relu_sigmoid_gate`**: main path `y_raw(t) = relu(Wx+b)` stays unbounded and
+- **`relu_sigmoid_gate`**: main path `y_raw(t) = relu(Wx+b)` stays unbounded and
      gradient-friendly; the recurrent feedback term is `tanh(y(t-1)/2)` — a
      bounded "activity level" that modulates the next step without being the
      output itself. Fixes `mult_gate`'s sign-flip (gate strictly in `(0,1)`) and
@@ -61,6 +99,7 @@ Lab book recording run learning experiments based on *autapsic inhibition AI (ai
    every step, not just the artificially-forced first one.
 
 Further defaults, chosen unilaterally as low-risk and reversible:
+
 - Autapse applies to **hidden layers only** — output logits stay a plain `Linear`.
 - `T` (unroll depth) isn't given anywhere in the notes — a constructor arg with a
   small default (e.g. 3), not a hardcoded constant.
@@ -73,7 +112,7 @@ control, so the *only* varying factor is the formula — a clean ablation. The C
 control is the separate architecture reference point from the 07-06 notes.
 
 | # | Model | Scheme | Notes |
-|---|-------|--------|-------|
+| --- | ------- | -------- | ------- |
 | 1 | CNN control | ReLU | small conv net (2×conv+pool+FC), no recurrence |
 | 2 | FCNN control | ReLU | 784→256→128→10, plain ReLU (= `relu_sigmoid_gate` autapse layer at `T=1`) |
 | 3 | FCNN control | sigmoid | same skeleton, plain sigmoid (= `sigmoid` autapse layer at `T=1`) |
@@ -87,6 +126,7 @@ control is the separate architecture reference point from the 07-06 notes.
 ## Data protocol
 
 Class-incremental MNIST, cumulative (`data.py`):
+
 - Stage 0: digits {0–4}
 - Stages 1–4: add digit 5, 6, 7, 8, 9 one at a time; train set is the union of all
   digits introduced so far (not replaced) — per 07-06 notes ("one by one enables
@@ -133,6 +173,7 @@ class AutapticLayer(nn.Module):
 ## Metrics: `metrics.py`
 
 Standard CL measures, Avalanche-style (the project's own reference framework):
+
 - Per-stage accuracy matrix (row = stage, col = digit)
 - Average accuracy after each stage
 - Backward transfer / forgetting: mean(acc at final stage − acc right after that

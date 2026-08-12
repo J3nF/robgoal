@@ -165,3 +165,8 @@ The coming week is going to include implementation!
     - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
     - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
         - Checking whether the worry is true is a pot. future TODO.
+
+### 2026-08-04
+
+- Prompt to think about including local information / backprop change in future inhibition algorithm.
+-
