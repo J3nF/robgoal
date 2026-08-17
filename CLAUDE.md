@@ -13,7 +13,8 @@ Answers:
 - 20/80 principle: lead with what matters;
 - Least effort that solves the problem;
 
-Coding standards: global CLAUDE.md, precedence-taking local STYLE.md
+Coding standards: global CLAUDE.md, precedence-taking local STYLE.md.
+Prose/notes standards (lab book, project docs): `WRITING_STYLE.md`.
 
 ## Project
 

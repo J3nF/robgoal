@@ -51,7 +51,10 @@ class AutapticLayer(nn.Module):
         self.scheme = scheme
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        activation = torch.sigmoid if self.scheme == "sigmoid" else torch.relu
+        if self.scheme == "sigmoid":
+            activation = torch.sigmoid
+        else:
+            activation = torch.relu
         y_tilde_prev = x.new_zeros(x.shape[0], self.linear.out_features)
         y = self._step(x, y_tilde_prev, activation)  # T is >= 1, so this always runs
         for _ in range(self.T - 1):

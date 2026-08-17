@@ -30,10 +30,27 @@ def test_gradients_flow_through_unroll(mode: Mode, scheme: Scheme) -> None:
     assert layer.linear.weight.grad.abs().sum() > 0
 
 
-def test_mult_gate_relu_sigmoid_never_sign_flips() -> None:
-    layer = AutapticLayer(4, 3, T=5, mode="mult_gate", scheme="relu_sigmoid")
+BOUNDED_COMBOS: list[tuple[Mode, Scheme]] = [
+    ("mult_gate", "sigmoid"),
+    ("mult_gate", "relu_sigmoid"),
+    ("output_diff", "relu_sigmoid"),
+]
+
+
+@pytest.mark.parametrize("mode,scheme", BOUNDED_COMBOS)
+def test_output_never_exceeds_raw_activation(mode: Mode, scheme: Scheme) -> None:
+    """0 <= y <= y_raw, for every combo except `output_diff` + `sigmoid`.
+
+    `output_diff` + `sigmoid` has no such guarantee: unlike `relu_sigmoid`,
+    the `sigmoid` scheme never clips the difference back to non-negative, so
+    `y_tilde_prev` can itself go negative and the bound doesn't hold. This is
+    the exact convergence problem lab-book.md's "Activation functions"
+    section discusses — it's why `relu_sigmoid` exists.
+    """
+    layer = AutapticLayer(4, 3, T=5, mode=mode, scheme=scheme)
     x = torch.randn(8, 4) * 10  # large magnitude to stress the gate
     y = layer(x)
-    y_raw = torch.relu(layer.linear(x))
+    activation = torch.sigmoid if scheme == "sigmoid" else torch.relu
+    y_raw = activation(layer.linear(x))
     assert torch.all(y >= 0)
     assert torch.all(y <= y_raw + 1e-6)

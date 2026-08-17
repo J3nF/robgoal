@@ -5,7 +5,7 @@
 Class-incremental MNIST, cumulative (`data.py`):
 
 - Stage 0: digits {0–4}
-- Stages 1–4: add digit 5, 6, 7, 8, 9 one at a time; train set is the union of all
+- Stages 1–5: add digit 5, 6, 7, 8, 9 one at a time; train set is the union of all
   digits introduced so far (not replaced) — per 07-06 notes ("one by one enables
   clearer results with regard to novelty").
 - Fixed `E` epochs per stage — "learnt" is epoch-delimited, not loss-delimited

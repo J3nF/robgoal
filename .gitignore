@@ -82,6 +82,9 @@ target/
 # Downloaded datasets
 /data/
 
+# Experiment output
+/results/
+
 # IPython
 profile_default/
 ipython_config.py

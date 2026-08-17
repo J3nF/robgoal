@@ -24,6 +24,7 @@ General coding principles, illustrated with generic examples. Rules, not prose.
 - Every public function gets a doc comment with: the call signature, a one-line summary, and one line per non-obvious parameter explaining its meaning (not just its type).
 - Use an explicit, greppable placeholder (e.g. `TBW`, `TODO`) for documentation not yet written, rather than leaving the function undocumented. Visible unfinished work beats silent gaps.
 - Document non-obvious invariants or gotchas in the doc comment, not just what the function computes — e.g. why a threshold check exists, or what would break without it.
+- Keep documentation in the code short and to the point. Provide concise reasons, no extensive prose.
 
 ## Comments
 
