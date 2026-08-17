@@ -8,22 +8,6 @@ from data import Stage
 from metrics import evaluate_per_digit_accuracy
 
 
-def train_one_epoch(
-    model: nn.Module,
-    loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    criterion: nn.Module,
-    device: torch.device,
-) -> None:
-    model.train()
-    for images, labels in loader:
-        images, labels = images.to(device), labels.to(device)
-        optimizer.zero_grad()
-        loss = criterion(model(images), labels)
-        loss.backward()
-        optimizer.step()
-
-
 def run_incremental_training(
     model: nn.Module,
     stages: list[Stage],
@@ -52,3 +36,20 @@ def run_incremental_training(
             train_one_epoch(model, loader, optimizer, criterion, device)
         accuracy_by_stage.append(evaluate_per_digit_accuracy(model, stage.test_data, device))
     return accuracy_by_stage
+
+
+def train_one_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device: torch.device,
+) -> None:
+    """Runs one training pass over `loader`, updating `model` in place."""
+    model.train()
+    for images, labels in loader:
+        images, labels = images.to(device), labels.to(device)
+        optimizer.zero_grad()
+        loss = criterion(model(images), labels)
+        loss.backward()
+        optimizer.step()

@@ -5,8 +5,8 @@ import torch
 
 from autapse import AutapticLayer, Mode, Scheme
 
-MODES: list[Mode] = ["output_diff", "bias_diff", "mult_gate"]
-SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid_gate"]
+MODES: list[Mode] = ["output_diff", "mult_gate"]
+SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid"]
 
 
 @pytest.mark.parametrize("scheme", SCHEMES)
@@ -30,8 +30,8 @@ def test_gradients_flow_through_unroll(mode: Mode, scheme: Scheme) -> None:
     assert layer.linear.weight.grad.abs().sum() > 0
 
 
-def test_mult_gate_relu_sigmoid_gate_never_sign_flips() -> None:
-    layer = AutapticLayer(4, 3, T=5, mode="mult_gate", scheme="relu_sigmoid_gate")
+def test_mult_gate_relu_sigmoid_never_sign_flips() -> None:
+    layer = AutapticLayer(4, 3, T=5, mode="mult_gate", scheme="relu_sigmoid")
     x = torch.randn(8, 4) * 10  # large magnitude to stress the gate
     y = layer(x)
     y_raw = torch.relu(layer.linear(x))

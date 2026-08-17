@@ -12,8 +12,8 @@ class FCNN(nn.Module):
     `T=1` makes this equivalent to a plain MLP (mode is irrelevant at `T=1`,
     since the inhibition signal starts at zero and every mode degenerates to
     the same plain activation on the first step) — this is how the FCNN
-    controls (tests 2 and 3) are built from the same class as the autapsic
-    variants (tests 4-9).
+    controls (tests 2 and 3) are built from the same class as the
+    `output_diff`/`mult_gate` autapsic variants (tests 4-7).
 
     Args:
         T: Number of internal unroll steps.

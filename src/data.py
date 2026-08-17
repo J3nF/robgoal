@@ -10,7 +10,7 @@ import torchvision
 from torch.utils.data import Subset
 from torchvision import transforms
 
-# Stage 0 introduces the first 5 digits at once, stages 1-4 add one digit each,
+# Stage 0 introduces the first 5 digits at once, stages 1-5 add one digit each,
 # per the 07-06 meeting notes ("one by one enables clearer results with regard
 # to novelty of new data").
 STAGE_DIGITS: list[list[int]] = [[0, 1, 2, 3, 4], [5], [6], [7], [8], [9]]
@@ -30,7 +30,7 @@ class Stage:
     """One step of the incremental-digit protocol.
 
     Attributes:
-        index: Stage number, 0-4.
+        index: Stage number, 0-5.
         digits_seen: All digit labels introduced by this stage (cumulative).
         train_subset: Training examples for every digit in `digits_seen`.
         test_data: The full MNIST test set (all 10 digits), used both to
@@ -64,13 +64,8 @@ def get_mnist_data(root: str = "data") -> tuple[LabeledDataset, LabeledDataset]:
     return train_data, test_data
 
 
-def _indices_for_digits(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
-    mask = torch.isin(dataset.targets, torch.tensor(sorted(digits)))
-    return torch.nonzero(mask).squeeze(1).tolist()
-
-
 def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[Stage]:
-    """Builds the 5-stage cumulative class-incremental protocol."""
+    """Builds the 6-stage cumulative class-incremental protocol."""
     stages = []
     digits_seen: set[int] = set()
     for stage_idx, new_digits in enumerate(STAGE_DIGITS):
@@ -84,3 +79,8 @@ def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[
         )
         stages.append(Stage(stage_idx, frozen_digits, train_subset, test_data))
     return stages
+
+
+def _indices_for_digits(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
+    mask = torch.isin(dataset.targets, torch.tensor(sorted(digits)))
+    return torch.nonzero(mask).squeeze(1).tolist()

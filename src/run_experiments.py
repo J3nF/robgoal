@@ -1,4 +1,4 @@
-"""Runs the 9 autapsic-inhibition tests. See lab-book.md, "The 9 tests"."""
+"""Runs the 7 autapsic-inhibition tests. See lab-book.md, "Implemented tests"."""
 
 from collections.abc import Callable
 
@@ -11,19 +11,19 @@ from metrics import average_accuracy, backward_transfer
 from models import CNN, FCNN
 from train import run_incremental_training
 
-MODES: list[Mode] = ["output_diff", "bias_diff", "mult_gate"]
-SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid_gate"]
+MODES: list[Mode] = ["output_diff", "mult_gate"]
+SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid"]
 T = 3
 EPOCHS_PER_STAGE = 5
 
 
 def build_configs() -> list[tuple[str, Callable[[], nn.Module]]]:
-    """The 9 tests: 3 controls (no self-inhibition) + 3 modes x 2 schemes."""
+    """The 7 tests: 3 controls (no self-inhibition) + 2 modes x 2 schemes."""
     configs: list[tuple[str, Callable[[], nn.Module]]] = [
         ("cnn_control", CNN),
-        # Mode is irrelevant at T=1 (inhibition starts at zero, all modes
+        # Mode is irrelevant at T=1 (inhibition starts at zero, both modes
         # degenerate to a plain activation on the only step that runs).
-        ("fcnn_control_relu", lambda: FCNN(T=1, mode="output_diff", scheme="relu_sigmoid_gate")),
+        ("fcnn_control_relu", lambda: FCNN(T=1, mode="output_diff", scheme="relu_sigmoid")),
         ("fcnn_control_sigmoid", lambda: FCNN(T=1, mode="output_diff", scheme="sigmoid")),
     ]
     for scheme in SCHEMES:
