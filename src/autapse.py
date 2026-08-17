@@ -32,11 +32,9 @@ class AutapticLayer(nn.Module):
               `(1 - inhibition)`.
         scheme: Which activation drives the main path:
             - "sigmoid": bounded output, inhibition signal is the raw output.
-            - "relu_sigmoid": unbounded ReLU output; the inhibition signal fed
-              to the next step is `tanh(y / 2)`, a bounded proxy that maps 0
-              activity to 0 inhibition (unlike `sigmoid(y)`, which floors at
-              0.5 for any nonnegative output and would inhibit even a unit
-              that fired zero last step).
+            - "relu_sigmoid": unbounded ReLU output; inhibition signal is
+              `tanh(y / 2)` instead of `sigmoid(y)`, see lab-book.md,
+              "Activation functions".
     """
 
     def __init__(

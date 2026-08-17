@@ -1,18 +1,17 @@
-"""Class-incremental cumulative MNIST protocol. See lab-book.md, Data protocol."""
+"""Cumulative MNIST protocol. See lab-book.md, "Class-incremental data protocol"."""
 
 import ssl
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 import certifi
 import torch
 import torchvision
-from torch.utils.data import Subset
+from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 
-# Stage 0 introduces the first 5 digits at once, stages 1-5 add one digit each,
-# per the 07-06 meeting notes ("one by one enables clearer results with regard
-# to novelty of new data").
+# One digit per stage after the initial 5, see lab-book.md, "Class-incremental
+# data protocol".
 STAGE_DIGITS: list[list[int]] = [[0, 1, 2, 3, 4], [5], [6], [7], [8], [9]]
 
 
@@ -45,9 +44,7 @@ class Stage:
 
 def get_mnist_data(root: str = "data") -> tuple[LabeledDataset, LabeledDataset]:
     """Downloads (if needed) and returns the MNIST train/test datasets."""
-    # Some systems' OpenSSL trust store is missing the CA that signs the MNIST
-    # mirror's cert; use certifi's bundle instead. The stdlib's stub for this
-    # attribute is stricter than what's actually assignable at runtime.
+    # certifi's bundle covers CAs missing from some systems' trust stores.
     ssl._create_default_https_context = (  # ty: ignore[invalid-assignment]
         lambda *a, **kw: ssl.create_default_context(cafile=certifi.where())
     )
@@ -71,10 +68,8 @@ def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[
     for stage_idx, new_digits in enumerate(STAGE_DIGITS):
         digits_seen |= set(new_digits)
         frozen_digits = frozenset(digits_seen)
-        # torch's Subset stub wants a nominal Dataset; LabeledDataset only requires the
-        # same __len__/__getitem__ methods structurally, which is all Subset actually uses.
         train_subset = Subset(
-            train_data,  # ty: ignore[invalid-argument-type]
+            cast(Dataset[tuple[torch.Tensor, int]], train_data),
             _indices_for_digits(train_data, frozen_digits),
         )
         stages.append(Stage(stage_idx, frozen_digits, train_subset, test_data))

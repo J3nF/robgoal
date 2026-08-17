@@ -123,6 +123,30 @@ Further defaults:
 - Autapse applies to **hidden layers only** — output logits stay a plain `Linear`.
 - The unroll depth `T` (unroll depth) is a small default at first; generally, consider it a controll parameter.
 
+### Class-incremental data protocol
+
+Each run starts with 5 of the 10 digits, then introduce the remaining 5 one at a time, one per stage — 6 stages total, cumulative (a later stage's training data is the union of every digit introduced so far, not a replacement of the previous set).
+
+The alternative is to reveal the whole held-back set at once, right after the initial 5.
+I chose one-by-one instead, without a strong reason.
+That being said, a single new digit per stage lets me attribute a stage's change in forgetting/generalization to *that* digit specifically, rather than to an entangled batch of five.
+
+It would be interesting to see how outcomes using batching would differ, though (TODO).
+
+(?) Seeding stage 0 with 5 digits is arbitrary/not reasoned out formally.
+
+### Evaluation metrics
+
+Every stage's evaluation on **both** the subset of *introduced* digits, as well as all untaught ones.
+
+This makes one accuracy read-out double as both a forgetting probe (accuracy on already-introduced digits, which can drop as new ones are learned) and a generalization probe (accuracy on not-yet-introduced digits) -- i.e., how much a network trained so far already generalises to unseen classes.
+
+Consequently, the per-stage/per-digit accuracy table is meant to be dense, since every stage evaluates all 10 digits.
+A blank cell would mean a caller passed only a some digits -- which, while tolerated, is not wished for.
+
+We also track backwards transfer, i.e., the accuracy drop on the intial digits introduced between stage 0 and the final stage.
+TODO Since any digit introduced later has no stage-0 accuracy to regress from, it only makes sense to pass initial digits (which is not checked for currently!).
+
 ## Implemented tests
 
 3 controls (no self-inhibition) + 2 formula variants × 2 activation schemes.

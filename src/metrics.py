@@ -1,10 +1,11 @@
-"""Continual-learning evaluation metrics. See lab-book.md, Metrics section."""
+"""Continual-learning evaluation metrics. See lab-book.md, "Evaluation metrics"."""
 
 from collections import defaultdict
+from typing import cast
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from data import LabeledDataset
 
@@ -15,14 +16,13 @@ def evaluate_per_digit_accuracy(
 ) -> dict[int, float]:
     """Computes test accuracy for each of the 10 digits.
 
-    Covers digits already introduced (forgetting) and not-yet-introduced ones
-    (generalization), per the 07-06 notes' "see how the network generalises".
+    Covers both forgetting (already-introduced digits) and generalization
+    (not-yet-introduced ones), see lab-book.md, "Evaluation metrics".
     """
     model.eval()
     correct: dict[int, int] = defaultdict(int)
     total: dict[int, int] = defaultdict(int)
-    # Same nominal-vs-structural mismatch as data.py's Subset call.
-    loader = DataLoader(test_data, batch_size=batch_size)  # ty: ignore[invalid-argument-type]
+    loader = DataLoader(cast(Dataset[tuple[torch.Tensor, int]], test_data), batch_size=batch_size)
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
         preds = model(images).argmax(dim=1)
@@ -43,11 +43,9 @@ def backward_transfer(
 ) -> float:
     """Mean accuracy drop on `first_stage_digits` between stage 0 and the final stage.
 
-    The forgetting measure from lab-book.md. Precondition: every digit in
-    `first_stage_digits` must have been introduced at stage 0 — the function
-    always uses `accuracy_by_stage[0]` as the "first learned" baseline, so
-    passing a digit introduced later (e.g. one added at stage 1+) would
-    silently compare against a baseline from before that digit existed.
+    The forgetting measure, see lab-book.md, "Evaluation metrics".
+    Precondition: every digit in `first_stage_digits` must have been
+    introduced at stage 0 — not checked.
     """
     first_stage_accuracy = accuracy_by_stage[0]
     final_stage_accuracy = accuracy_by_stage[-1]
@@ -59,9 +57,8 @@ def backward_transfer(
 def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:
     """Renders per-stage, per-digit accuracy as a table (row = stage, col = digit).
 
-    A blank cell means that digit wasn't evaluated at that stage (not expected
-    currently, since every stage evaluates on the full test set, but kept
-    defensive in case a caller passes partial per-stage dicts).
+    A blank cell means a caller passed a partial per-stage accuracy dict;
+    see lab-book.md, "Evaluation metrics".
     """
     digits = sorted({digit for stage_accuracy in accuracy_by_stage for digit in stage_accuracy})
     header = "stage | " + " ".join(f"{digit:>5}" for digit in digits)

@@ -1,4 +1,4 @@
-"""Stage-wise, epoch-delimited training loop. See lab-book.md, Data protocol."""
+"""Stage-wise, epoch-delimited training loop. See lab-book.md, "Experiment design"."""
 
 import torch
 from torch import nn
@@ -18,8 +18,8 @@ def run_incremental_training(
 ) -> list[dict[int, float]]:
     """Trains `model` through the cumulative incremental-digit protocol.
 
-    "Learnt" is epoch-delimited (a fixed `epochs_per_stage` per stage), not
-    loss-delimited, per the 07-14 pre-notes.
+    "Learnt" is epoch-delimited, not loss-delimited, see lab-book.md,
+    "Experiment design".
 
     Returns:
         One per-digit accuracy dict (see `metrics.evaluate_per_digit_accuracy`)

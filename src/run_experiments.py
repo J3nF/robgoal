@@ -24,8 +24,7 @@ def build_configs() -> list[tuple[str, Callable[[], nn.Module]]]:
     """The 7 tests: 3 controls (no self-inhibition) + 2 modes x 2 schemes."""
     configs: list[tuple[str, Callable[[], nn.Module]]] = [
         ("cnn_control", CNN),
-        # Mode is irrelevant at T=1 (inhibition starts at zero, both modes
-        # degenerate to a plain activation on the only step that runs).
+        # T=1: mode is irrelevant, see autapse.AutapticLayer.
         ("fcnn_control_relu", lambda: FCNN(T=1, mode="output_diff", scheme="relu_sigmoid")),
         ("fcnn_control_sigmoid", lambda: FCNN(T=1, mode="output_diff", scheme="sigmoid")),
     ]

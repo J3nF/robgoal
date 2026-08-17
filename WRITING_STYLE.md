@@ -3,15 +3,10 @@
 For prose in Markdown notes/docs (lab books, design notes, project-plan docs).
 Not code — see `STYLE.md` for that. Rules, not prose.
 
-Reference: `lab-book.md` is the target style. `implementation_doc.md` is the
-anti-pattern this guide corrects.
-
 ## Voice
 
-- Write in first person ("I propose", "I wish to run", "We wish ai2 to...").
-  Don't describe your own reasoning in the impersonal third person ("the
-  following describes...", "one class, covering...").
-- A note records a person doing research, not a system describing itself.
+- Write in first person ("I propose", "I wish to run", "We wish ai2 to...") or, for active objects, the impersonal third person ("the function calls...", "the class covers...").
+- A note generally records a person doing research, not a system describing itself.
 
 ## Show the reasoning, not just the outcome
 
@@ -32,7 +27,7 @@ anti-pattern this guide corrects.
 
 ## Hedge honestly
 
-- Use "(?)" when a decision is provisional.
+- Use "(?)" to label provisional decisions.
   A lab book is a record of an evolving hypothesis, not a finished spec —
   unhedged declarative sentences imply settled fact, so reserve them for
   things that actually are settled.

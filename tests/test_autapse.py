@@ -1,4 +1,4 @@
-"""Tests for AutapticLayer. See lab-book.md, Verification."""
+"""Tests for AutapticLayer. See lab-book.md."""
 
 import pytest
 import torch
@@ -41,11 +41,10 @@ BOUNDED_COMBOS: list[tuple[Mode, Scheme]] = [
 def test_output_never_exceeds_raw_activation(mode: Mode, scheme: Scheme) -> None:
     """0 <= y <= y_raw, for every combo except `output_diff` + `sigmoid`.
 
-    `output_diff` + `sigmoid` has no such guarantee: unlike `relu_sigmoid`,
-    the `sigmoid` scheme never clips the difference back to non-negative, so
-    `y_tilde_prev` can itself go negative and the bound doesn't hold. This is
-    the exact convergence problem lab-book.md's "Activation functions"
-    section discusses — it's why `relu_sigmoid` exists.
+    That combo has no such guarantee: `sigmoid` never clips the difference
+    back to non-negative, so `y_tilde_prev` can go negative — the
+    convergence problem lab-book.md's "Activation functions" section
+    discusses, and why `relu_sigmoid` exists.
     """
     layer = AutapticLayer(4, 3, T=5, mode=mode, scheme=scheme)
     x = torch.randn(8, 4) * 10  # large magnitude to stress the gate

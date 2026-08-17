@@ -28,11 +28,11 @@ I was reading a paper that is under review for NeurIPS and their idea on meta in
 
 ### 2026-06-26
 
-#### Pre-note
+#### Pre-notes 01
 
 The question we want to answer at the end is similar to the "No Forgetting Learning paper" **"How can we design a memory-efficient CL framework that operates within the fixed capacity of the backbone network without sacrificing performance?"**
 
-#### Notes
+#### Notes 01
 
 - We rather want to focus on how to distribute information across the network (instead of finding novel learning rules).
 - We wish to find measures capturing *learning utility* of neurons (to help diagnose "static" learning).
@@ -47,12 +47,12 @@ Deliverables for next Tuesday: **How do people categorize neuron's informational
 
 ### 2026-06-30
 
-#### Pre-note
+#### Pre-notes 02
 
 Start actionable methodological implementation discussions.
 The coming week is going to include implementation!
 
-#### Notes
+#### Notes 02
 
 - We discussed papers around measuring informational contributions of single neurons
 - Some ways to do so (roughly):
@@ -83,6 +83,8 @@ The coming week is going to include implementation!
 
 ### 2026-07-06
 
+#### Notes 03
+
 - Jens wrote down our line of argument (to be added here!!)
 - Short literature review found no past work using self-recurrent connections in continual learning.
   - Biological side: These *autapses* contribute to self-regulation of neurons and network-wide dynamics.
@@ -91,7 +93,7 @@ The coming week is going to include implementation!
   - Q: How to identify these neurons?
   - After some discussion, we settle on ***focusing on implementation for the coming week, and returning to this point with fresh eyes***.
 
-#### Implementation
+##### Implementation
 
 - Go for the self-recurrent network as of now.
 - Use MNIST data for now.
@@ -108,7 +110,7 @@ The coming week is going to include implementation!
 
 ### 2026-07-14
 
-#### Pre-meeting notes
+#### Pre-meeting notes 04
 
 - Planning fallacies:
   - I spent more hours than reasonable on trying to download MNIST data for PyTorch.
@@ -117,7 +119,7 @@ The coming week is going to include implementation!
   - Assuming neurons have finite """precision""" $p(x|y\neq x) \neq 0$, firing rates 0 and 1 waste information.
   - Our artificial """inhibition""" push neurons away from $p\in \{0,1\}$.
 
-#### Notes
+#### Notes 04
 
 - Jens presented line of argument:
   - Big picture:
@@ -132,14 +134,16 @@ The coming week is going to include implementation!
     - => ***Single neurons' job is not to learn by themselves^[thereby making the network depending on them]; learning representations is the networks job.***
   - Note the line of argument is not ad-hoc, but motivated by the autapses idea. There is some overlap, but no perfect isomorphism.
 
-### 2026-07-14
+### 2026-07-28
 
-#### Summer School
+#### Notes 05
+
+##### Summer School
 
 - Main point: People were broadly interested in our research idea (though not they were not domain experts).
 - Got in touch with potentially interesting future contacts (specially in Computational Neuroscience, Information Theory).
 
-#### Current Plan
+##### Current Plan
 
 - Notation:
   - Most importantly, fancy project name: *autapses-inhibited AI (ai2)*.
@@ -164,5 +168,7 @@ The coming week is going to include implementation!
     - Checking whether the worry is true is a pot. future TODO.
 
 ### 2026-08-04
+
+#### Notes 06
 
 - Prompt to think about including local information / backprop change in future inhibition algorithm.

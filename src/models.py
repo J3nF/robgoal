@@ -9,11 +9,8 @@ from autapse import AutapticLayer, Mode, Scheme
 class FCNN(nn.Module):
     """784-256-128-10 MLP whose hidden layers are `AutapticLayer`s.
 
-    `T=1` makes this equivalent to a plain MLP (mode is irrelevant at `T=1`,
-    since the inhibition signal starts at zero and every mode degenerates to
-    the same plain activation on the first step) — this is how the FCNN
-    controls (tests 2 and 3) are built from the same class as the
-    `output_diff`/`mult_gate` autapsic variants (tests 4-7).
+    `T=1` gives the FCNN controls (tests 2-3); see `autapse.AutapticLayer`
+    for why mode is irrelevant there.
 
     Args:
         T: Number of internal unroll steps.
