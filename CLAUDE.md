@@ -12,14 +12,13 @@ Answers:
 - short, factual, direct, no fluff;
 - 20/80 principle: lead with what matters;
 - Least effort that solves the problem;
-- Coding standards: global CLAUDE.md, not repeated here.
+
+Coding standards: global CLAUDE.md, precedence-taking local STYLE.md
 
 ## Project
 
 Codebase starts as a skeleton (`main.py` is a stub).
-Project notes in `Mini_project_meta_continual_learning.md`.
-Read those for the hypothesis, design constraints, and current direction;
-don't duplicate it here.
+Project notes in Markdown files at root -- read those for the hypothesis, design constraints, and current direction.
 
 ## Setup
 
