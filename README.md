@@ -2,7 +2,7 @@
 
 A multi-week project on implementing neural networks capable of robust goal-keeping; specifically tackling catastrophic forgetting of features.
 
-More detailed notes can be found in `Mini_project_meta_continual_learning.md`.
+More detailed notes can be found in  the `docs` folder, particularly in `docs/Mini_project_meta_continual_learning.md`.
 
 ## Set-up
 
