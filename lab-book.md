@@ -2,44 +2,73 @@
 
 Lab book recording experiments with *autapsic inhibition AI (ai2 )* networks, as sketched out in `Mini_project_meta_continual_learning.md`.
 
-## Overall Plan
+## General contents
 
-- Notation:
-  - Most importantly, fancy project name: *autapses-inhibited AI (ai2)*.
-  - $i =$ neuron of concern;
-  - $\tilde\bullet =$ autapses-related parameter;
-  - $y_i =$ $i$'s unadapted output;
-  - $b_i =$ $i$'s bias.
-- Have run MNIST experiments for
+### Wishlist
+
+- If ai2 implemented *adaption*, it would behave like a leaky integral of activity.
+- We wish ai2 to:
+  - Diffuse information across neurons (laterally and longitudinally).
+  - Have a neuron self-regulate to, more or less, switch on and off between inputs.
+  - Intervene by raising and lowering outputs of neurons (i.e., not only reducing/increasing them).
+  - Have rigorous formal underbuilding.
+
+#### Terrible(?) brainstorms
+
+- When using a sigmoid-shaped activation function, set the new midpoint to the last output.
+
+### Notation
+
+- $i =$ neuron of concern;
+- $\tilde\bullet =$ autapses-related parameter;
+- $y_i =$ $i$'s unadapted output;
+- $b_i =$ $i$'s bias.
+
+### Possible implementations
+
+$$\begin{align}
+  \tilde b_i(t)
+    &= b_i(t) - \tilde{b}_i(t-1)
+  \tilde y_i(t)
+    &= y_i(t) - \tilde{y}_i(t-1)
+  \\
+  \tilde y_i(t)
+    &= y_i(t)\cdot\left(
+        1 - \tilde{y}_i(t-1)
+      \right) \nonumber\\
+    &= y_i(t) - \tilde{y}_i(t-1)y_i(t)
+\end{align}$$
+
+### Experiment design
+
+- Learning is to take place between "timesteps" $t, (t-1)$.
+      - Option A: Show the same input $T$ times to give the network time to have time to converge, given ai2 adaptions.
+      - Option B: Implement memory (leaky integrate-fire/integrate-inhibit).
+- (Future control group: Randomly switching subsets of neurons off?)
+- Learn subsets of all numbers, adding more and more after having learnt old set.
+- Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
+  - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
+    - Checking whether the worry is true is a potential future TODO.
+- Note: These ai2 implementations will reduce activity for the vast majority of scenarioes.
+
+### Chosen experiments
+
+- Control groups:
   - CNN
   - Fully connected NN
-  - Some autapsic FCNN implementation:
-      $$\begin{align}
-        \tilde b_i(t)
-          &= b_i(t) - b_i(t-1)
-        \\
-        \tilde y_i(t)
-          &= y_i(t) - \tilde y_i(t-1)
-        \\
-        \tilde y_i(t)
-          &= y_i(t)\cdot\left(
-              1 - \tilde{y_i}(t-1)
-            \right) \nonumber\\
-          &= y_i(t) - \tilde y_i(t-1)y_i(t)
-      \end{align}$$
-    - Learning is to take place between "timesteps" $t, (t-1)$.
-      - Option A: Show the same input $N_t$ times to give the network time to converge, given ai2 adaptions;
-      - Option B: Implement memory
-    - Eq.s (2) and (3). are most promising;
-      - Only adapting the bias (eq. (1)), while being "minimally invasive" and easily interpretable, probably throws out too much information.
-      - Put another way, in order for eq. (1) to be sufficient, the bias needs to present a big part of the information a neuron holds, given inputs, which seems to be a rather big "if".
-  - (Future control group: Randomly switching subsets of neurons off.)
-  - Learn subsets of all numbers, adding more and more after having learnt old set.
-  - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
-    - Learning is epoch-delimited because cost function conditions may restrict allowed states too much (i.e., to a sphere in the loss landscape).
-      - Checking whether the worry is true is a pot. future TODO.
+- Our ai2 implementations:
+  $$\begin{align}
+    \tilde y_i(t)
+      &= y_i(t) - \tilde{y}_i(t-1)
+    \\
+    \tilde y_i(t)
+      &= y_i(t)\cdot\left(
+          1 - \tilde{y}_i(t-1)
+        \right) \nonumber\\
+      &= y_i(t) - \tilde{y}_i(t-1)y_i(t)
+  \end{align}$$
 
-## Considerations and resolved ambiguities
+## Thought processes on above choices and resolved ambiguities
 
 ### The meaning of `t` for static-image classifiers
 
@@ -50,27 +79,37 @@ This is done to:
 - Enable autapsic inhibition to take place in the first place.
 Note how, for `T=1`, ai2 networks reduce to a plain layer.
 
-### Activation functions: $tanh$ and ReLU
+### Activation functions: ReLU and Sigmoids
 
-A priori, activation functions bound to $[0,1]$ match intuitions gained from biological spiking neural networks.
+A priori, activation functions bound to $[0,1]$ match intuitions of thinking about relative inhibition, and seem closer to biological spiking neural networks (as in, there is a maximum signal (density)).
 Further, some ai2 schemes need boundedness to keep the adapted ouput in the activation function's domain (e.g., keeping $1-y(t-1)$ positive).
 
-Yet, contrasting bound activation functions with ReLU activations used by our controls result in an apples-to-oranges comparison, and, more troublingly, make some ai2 schemes converge to 0 during a rollout (again, consider $1-y(t-1)$).
+Yet, contrasting bound activation functions with ReLU activations used by our controls result in an apples-to-oranges comparison, and, more troublingly, makes some ai2 schemes converge to 0 during rollout (again, consider $1-y(t-1)$, which can only decrease $\tilde{y}_(t)$ for positive-only outputs).
 
-The latter incompatibility of positively bound activation function and some ai2 formulations offers two interpretations: That either the ai2 formulations or activation functions, since less generalisable / more prone, are a bad choice overall.
+Especially the latter incompatibility's problematicness may be interpreted two ways: Either the ai2 formulations, or activation functions, are a bad choice, given the other.
 
 I propose and run two different mitigation strategies:
 
-First, instead of Sigmoids, networks use a scaled $\tanh$ activation functions.
-While this keeps ouputs in the same domain, inhibition may still make neural outputs converge to 0.
+First, instead of ReLU, networks use a sigmoid activation functions.
+While this can keep ouputs in the same domain, inhibition may still make neural outputs converge to 0.
 
-The second approach combines ReLU activation with $\tanh$-gated inhibition, trying to ease comparability to ReLU structures while allowing
+The second approach combines ReLU activation with sigmoid-gated inhibition, i.e.
+$$
+\tilde y_i(t) = s(a_\text{ReLU}(x))
+$$
+with a sigmoid function $s:A\to \tilde Y$ yielding ai2 adaptions $\tilde y_i(t)$.
 
-   Resolution — run both as parallel axes:
+This should ease comparability to ReLU structures while keeping ai2 implementation outputs in the expected domain ($[0,1)$).
 
-- **`sigmoid`**: as originally designed, `y(t)` combines `sigmoid(Wx+b)` with
+#### Implemented activation schemes
+
+TODO
+
+Run both activation schemes in parallel:
+
+- Keyword `sigmoid` implies usage of `y(Wx+b)` with
      `y(t-1)` directly (already bounded).
-- **`relu_sigmoid_gate`**: main path `y_raw(t) = relu(Wx+b)` stays unbounded and
+- **`relu_sigmoid_gate`**: main path `y(t) = relu(Wx+b)` stays unbounded and
      gradient-friendly; the recurrent feedback term is `tanh(y(t-1)/2)` — a
      bounded "activity level" that modulates the next step without being the
      output itself. Fixes `mult_gate`'s sign-flip (gate strictly in `(0,1)`) and
