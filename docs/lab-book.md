@@ -20,15 +20,19 @@ Lab book recording experiments with *autapsic inhibition AI (ai2 )* networks, as
 ### Notation
 
 - $i =$ neuron of concern;
-- $\tilde\bullet =$ autapses-related parameter;
-- $y_i =$ $i$'s unadapted output;
+- $\tilde\bullet =$ variables changed by autapsic inhibition;\
+- $\bullet^\text{self}_i = $ parameter or $i$'s autapsis;
+  => $y_i =$ $i$'s unadapted activity/output (i.e., no effect of ai2);\
+  => $\tilde y_i =$ ai2-adapted activity/output;\
+  => $y^\text{self}_i =$ neuron i's autapsis activity at input time $t$;
 - $b_i =$ $i$'s bias.
 
 ### Possible implementations
 
 $$\begin{align}
   \tilde b_i(t)
-    &= b_i(t) - \tilde{b}_i(t-1)
+    &= b_i(t) - \tilde b_i(t-1)
+  \\
   \tilde y_i(t)
     &= y_i(t) - \tilde{y}_i(t-1)
   \\

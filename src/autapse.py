@@ -1,7 +1,7 @@
 """Autapsic self-inhibition layer.
 
-See lab-book.md for the derivation of the two activation schemes and two
-inhibition modes implemented here.
+Implementing two activation schemes and two inhibition modes.
+See `lab-book.md` for more details.
 """
 
 from typing import Literal
@@ -9,7 +9,7 @@ from typing import Literal
 import torch
 from torch import nn
 
-Mode = Literal["output_diff", "mult_gate"]
+Mode = Literal["ai2_diff", "ai2_gate"]
 Scheme = Literal["sigmoid", "relu_sigmoid"]
 
 
@@ -17,18 +17,18 @@ class AutapticLayer(nn.Module):
     """A linear layer with self-recurrent (autapsic) inhibition.
 
     Unrolls the same input through `T` internal pseudo-timesteps. At each step,
-    a neuron's own output from the previous step (y_tilde_prev, i.e. \\tilde
-    y_i(t-1) in lab-book.md notation) feeds back in to inhibit it, per `mode`.
-    `T=1` degenerates exactly to a plain `Linear` + activation, since the
-    inhibition signal is initialized to zero.
+    a neuron's own output from the previous step ("y_self") feeds back in
+    to inhibit it.
+    For `T=1`, it degenerates exactly to a plain `Linear` + activation, since
+    the inhibition signal is initialized to zero.
 
     Args:
         in_features: Input dimensionality.
         out_features: Output dimensionality.
         T: Number of internal unroll steps.
         mode: How the inhibition signal is combined with the raw output:
-            - "output_diff": subtract inhibition from the activated output.
-            - "mult_gate": multiplicatively gate the activated output by
+            - "ai2_diff": subtract inhibition from the activated output.
+            - "ai2_gate": multiplicatively gate the activated output by
               `(1 - inhibition)`.
         scheme: Which activation drives the main path:
             - "sigmoid": bounded output, inhibition signal is the raw output.
@@ -49,20 +49,32 @@ class AutapticLayer(nn.Module):
         self.scheme = scheme
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.scheme == "sigmoid":
-            activation = torch.sigmoid
-        else:
-            activation = torch.relu
-        y_tilde_prev = x.new_zeros(x.shape[0], self.linear.out_features)
-        y = self._step(x, y_tilde_prev, activation)  # T is >= 1, so this always runs
+        f_activation = self.get_f_activation()
+        y_self = x.new_zeros(x.shape[0], self.linear.out_features)
+        y = self._step(x, y_self, f_activation)  # Get uninhibited activation
         for _ in range(self.T - 1):
-            y_tilde_prev = y if self.scheme == "sigmoid" else torch.tanh(y / 2)
-            y = self._step(x, y_tilde_prev, activation)
+            y_self = self.get_y_self(y)
+            y = self._step(x, y_self, f_activation)
         return y
 
-    def _step(self, x: torch.Tensor, y_tilde_prev: torch.Tensor, activation) -> torch.Tensor:
-        y_raw = activation(self.linear(x))
-        if self.mode == "output_diff":
-            y = y_raw - y_tilde_prev
+    def get_f_activation(self):
+        if self.scheme == "sigmoid":
+            f_activation = torch.sigmoid
+        else:
+            f_activation = torch.relu
+        return f_activation
+
+    def get_y_self(self, y):
+        if self.scheme == "sigmoid":
+            y_self = y
+        else:
+            y_self = torch.tanh(y/2)
+        return y_self
+
+    #TODO
+    def _step(self, x: torch.Tensor, y_self: torch.Tensor, f_activation) -> torch.Tensor:
+        y_raw = f_activation(self.linear(x))
+        if self.mode == "ai2_diff":
+            y = y_raw - y_self
             return torch.relu(y) if self.scheme == "relu_sigmoid" else y
-        return y_raw * (1 - y_tilde_prev)  # mult_gate
+        return y_raw * (1 - y_self)  # ai2_gate
