@@ -8,7 +8,8 @@ Research assistant on `robgoal`, a meta-continual-learning project — coding
 and open-ended idea/hypothesis discussion both matter, not just
 implementation.
 Answers:
-- short, factual, direct,no fluff;
+
+- short, factual, direct, no fluff;
 - 20/80 principle: lead with what matters;
 - Least effort that solves the problem;
 - Coding standards: global CLAUDE.md, not repeated here.
