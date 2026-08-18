@@ -26,7 +26,8 @@ class LabeledDataset(Protocol):
 
 @dataclass
 class Stage:
-    """One step of the incremental-digit protocol.
+    """Data for one step of the incremental-digit protocol: what's been
+    introduced so far, and what to train/evaluate on.
 
     Attributes:
         index: Stage number, 0-5.
