@@ -7,14 +7,14 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from autapse import Mode, Scheme
+from autapse import AI2_Variant, Activation_Scheme
 from data import STAGE_DIGITS, build_stages, get_mnist_data
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from models import CNN, FCNN
 from train import run_incremental_training
 
 MODES: list[Mode] = ["ai2_diff", "ai2_gate"]
-SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid"]
+SCHEMES: list[Activation_Scheme] = ["sigmoid", "relu_sigmoid"]
 T = 3
 EPOCHS_PER_STAGE = 5
 RESULTS_DIR = Path("results")

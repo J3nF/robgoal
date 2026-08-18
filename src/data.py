@@ -86,4 +86,5 @@ def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[
 
 def _get_digit_indices(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
     mask = torch.isin(dataset.targets, torch.tensor(sorted(digits)))
-    return torch.nonzero(mask).squeeze(1).tolist()
+    digit_indices = torch.nonzero(mask).squeeze(1).tolist()
+    return digit_indices

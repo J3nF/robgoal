@@ -9,8 +9,8 @@ from typing import Literal
 import torch
 from torch import nn
 
-Mode = Literal["ai2_diff", "ai2_gate"]
-Scheme = Literal["sigmoid", "relu_sigmoid"]
+AI2_Variant= Literal["ai2_diff", "ai2_gate"]
+Activation_Scheme = Literal["sigmoid", "relu_sigmoid"]
 
 
 class AutapticLayer(nn.Module):
@@ -38,7 +38,7 @@ class AutapticLayer(nn.Module):
     """
 
     def __init__(
-        self, in_features: int, out_features: int, T: int, mode: Mode, scheme: Scheme
+        self, in_features: int, out_features: int, T: int, mode: AI2_Variant, scheme: Activation_Scheme
     ) -> None:
         if T < 1:
             raise ValueError(f"T must be >= 1, got {T}")
@@ -69,8 +69,10 @@ class AutapticLayer(nn.Module):
     def get_y_self(self, y):
         if self.scheme == "sigmoid":
             y_self = y
-        else:
+        elif self.scheme == "relu_sigmoid":
             y_self = torch.tanh(y / 2)
+        else:
+            raise ValueError(f"Unknown scheme {self.scheme}")
         return y_self
 
     # TODO
@@ -79,8 +81,4 @@ class AutapticLayer(nn.Module):
         if self.mode == "ai2_diff":
             y_tilde = y - y_self
             return torch.relu(y) if self.scheme == "relu_sigmoid" else y
-        elif self.mode == "ai2_gate":
-            y_tilde = y * (1 - y_self)  # ai2_gate
-        else:
-            raise ValueError(f"Unknown mode {self.mode}")
-        return y_tilde
+        return y * (1- y_self)

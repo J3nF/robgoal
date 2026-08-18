@@ -3,7 +3,7 @@
 import torch
 from torch import nn
 
-from autapse import AutapticLayer, Mode, Scheme
+from autapse import AutapticLayer, AI2_Variant, Activation_Scheme
 
 
 class FCNN(nn.Module):
@@ -18,7 +18,7 @@ class FCNN(nn.Module):
         scheme: Activation scheme, see `autapse.AutapticLayer`.
     """
 
-    def __init__(self, T: int, mode: Mode, scheme: Scheme) -> None:
+    def __init__(self, T: int, mode: AI2_Variant, scheme: Activation_Scheme) -> None:
         super().__init__()
         self.hidden1 = AutapticLayer(28 * 28, 256, T, mode, scheme)
         self.hidden2 = AutapticLayer(256, 128, T, mode, scheme)
