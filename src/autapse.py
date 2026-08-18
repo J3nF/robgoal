@@ -9,8 +9,8 @@ from typing import Literal
 import torch
 from torch import nn
 
-Mode = Literal["ai2_diff", "ai2_gate"]
-Scheme = Literal["sigmoid", "relu_sigmoid"]
+AI2_Variant= Literal["ai2_diff", "ai2_gate"]
+Activation_Scheme = Literal["sigmoid", "relu_sigmoid"]
 
 
 class AutapticLayer(nn.Module):
@@ -38,7 +38,7 @@ class AutapticLayer(nn.Module):
     """
 
     def __init__(
-        self, in_features: int, out_features: int, T: int, mode: Mode, scheme: Scheme
+        self, in_features: int, out_features: int, T: int, mode: AI2_Variant, scheme: Activation_Scheme
     ) -> None:
         if T < 1:
             raise ValueError(f"T must be >= 1, got {T}")
@@ -60,21 +60,25 @@ class AutapticLayer(nn.Module):
     def get_f_activation(self):
         if self.scheme == "sigmoid":
             f_activation = torch.sigmoid
-        else:
+        elif self.scheme == "relu_sigmoid":
             f_activation = torch.relu
+        else:
+            raise ValueError(f"Unknown scheme {self.scheme}")
         return f_activation
 
     def get_y_self(self, y):
         if self.scheme == "sigmoid":
             y_self = y
+        elif self.scheme == "relu_sigmoid":
+            y_self = torch.tanh(y / 2)
         else:
-            y_self = torch.tanh(y/2)
+            raise ValueError(f"Unknown scheme {self.scheme}")
         return y_self
 
-    #TODO
+    # TODO
     def _step(self, x: torch.Tensor, y_self: torch.Tensor, f_activation) -> torch.Tensor:
-        y_raw = f_activation(self.linear(x))
+        y = f_activation(self.linear(x))
         if self.mode == "ai2_diff":
-            y = y_raw - y_self
+            y_tilde = y - y_self
             return torch.relu(y) if self.scheme == "relu_sigmoid" else y
-        return y_raw * (1 - y_self)  # ai2_gate
+        return y * (1- y_self)

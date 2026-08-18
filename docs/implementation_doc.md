@@ -54,25 +54,24 @@ Standard CL measures, Avalanche-style (the project's own reference framework):
 
 Coding conventions for `src/`/`tests/` are in `STYLE.md`, not repeated here.
 
-Flat modules under `src/` (no `__init__.py`, no `[build-system]` in
-`pyproject.toml` — still no installable package). Sibling imports between them
-(e.g. `from data import Stage`) resolve because `pyproject.toml` sets
-`[tool.pytest.ini_options] pythonpath = ["src"]` for tests, and running a
-script directly (`uv run python src/run_experiments.py`) auto-adds its own
-directory to `sys.path`. `tests/` holds only actual test modules, not
-implementation code.
+Flat modules under `src/` -- i.e., this is no installable package.
+Sibling imports between them (e.g. `from data import Stage`) resolve because
+`pyproject.toml` sets `[tool.pytest.ini_options] pythonpath = ["src"]` for
+tests, and running a script directly (`uv run python src/run_experiments.py`)
+auto-adds its own directory to `sys.path`. `tests/` holds only actual test
+modules, not implementation code.
 
 ## Verification
 
 - `tests/test_autapse.py`: assert `AutapticLayer(..., T=1)` output equals a plain
   `sigmoid(Linear(x))` / `relu(Linear(x))` for both modes × both schemes (degeneracy
   check); assert gradients flow through `T>1` unrolls (no detached state); assert
-  `mult_gate` under `relu_sigmoid` never sign-flips (gate strictly in `(0,1)`).
+  `ai2_gate` under `relu_sigmoid` never sign-flips (gate strictly in `(0,1)`).
 - `tests/test_data.py`: assert stage `k`'s train set is the superset of stage
   `k-1`'s labels plus exactly one new label; assert test set always contains all 10
   digits.
 - `uv run pytest -q` for the above.
 - `ruff check` / `ty check` clean on new modules.
-- Smoke-run `run_experiments.py` for 1 epoch/stage on all 7 configs, confirm no
+- Smoke-run `run_experiments.py` for 2 epochs/stages on all 7 configs, confirm no
   NaNs/crashes and that the accuracy matrix + BWT numbers are produced before
   committing to full-length runs.

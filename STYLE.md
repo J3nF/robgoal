@@ -25,6 +25,7 @@ General coding principles, illustrated with generic examples. Rules, not prose.
 - Use an explicit, greppable placeholder (e.g. `TBW`, `TODO`) for documentation not yet written, rather than leaving the function undocumented. Visible unfinished work beats silent gaps.
 - Document non-obvious invariants or gotchas in the doc comment, not just what the function computes — e.g. why a threshold check exists, or what would break without it.
 - Keep documentation in the code short and to the point. Provide concise reasons, no extensive prose.
+- Naming a concept isn't enough, for a docstring, function name, or variable name alike — state the relationship to it: is it, does it, computes it, or holds data for it (e.g. "Data for one step of X" vs "Runs one step of X", not just "One step of X").
 
 ## Comments
 

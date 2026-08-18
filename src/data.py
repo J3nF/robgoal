@@ -12,6 +12,13 @@ from torchvision import transforms
 
 # One digit per stage after the initial 5, see lab-book.md, "Class-incremental
 # data protocol".
+# TODO: Research behaviour given different splits, e.g.
+#
+# - 50-50 step;
+# - permutations of same split structures;
+# - large vs small split differenes
+#
+# Control for how big an impact this has on performance delta of ai2, controls.
 STAGE_DIGITS: list[list[int]] = [[0, 1, 2, 3, 4], [5], [6], [7], [8], [9]]
 
 
@@ -26,7 +33,8 @@ class LabeledDataset(Protocol):
 
 @dataclass
 class Stage:
-    """One step of the incremental-digit protocol.
+    """Data for one step of the incremental-digit protocol: what's been
+    introduced so far, and what to train/evaluate on.
 
     Attributes:
         index: Stage number, 0-5.
@@ -62,20 +70,21 @@ def get_mnist_data(root: str = "data") -> tuple[LabeledDataset, LabeledDataset]:
 
 
 def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[Stage]:
-    """Builds the 6-stage cumulative class-incremental protocol."""
+    """Split class-grouped data into stages which NNs train on in one after the other."""
     stages = []
     digits_seen: set[int] = set()
     for stage_idx, new_digits in enumerate(STAGE_DIGITS):
-        digits_seen |= set(new_digits)
-        frozen_digits = frozenset(digits_seen)
+        digits_seen |= set(new_digits)  # Combine to-be-seen digits in-place
+        digits_frozen = frozenset(digits_seen)
         train_subset = Subset(
             cast(Dataset[tuple[torch.Tensor, int]], train_data),
-            _indices_for_digits(train_data, frozen_digits),
+            _get_digit_indices(train_data, digits_frozen),
         )
-        stages.append(Stage(stage_idx, frozen_digits, train_subset, test_data))
+        stages.append(Stage(stage_idx, digits_frozen, train_subset, test_data))
     return stages
 
 
-def _indices_for_digits(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
+def _get_digit_indices(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
     mask = torch.isin(dataset.targets, torch.tensor(sorted(digits)))
-    return torch.nonzero(mask).squeeze(1).tolist()
+    digit_indices = torch.nonzero(mask).squeeze(1).tolist()
+    return digit_indices

@@ -7,14 +7,14 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from autapse import Mode, Scheme
+from autapse import AI2_Variant, Activation_Scheme
 from data import STAGE_DIGITS, build_stages, get_mnist_data
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from models import CNN, FCNN
 from train import run_incremental_training
 
-MODES: list[Mode] = ["output_diff", "mult_gate"]
-SCHEMES: list[Scheme] = ["sigmoid", "relu_sigmoid"]
+MODES: list[Mode] = ["ai2_diff", "ai2_gate"]
+SCHEMES: list[Activation_Scheme] = ["sigmoid", "relu_sigmoid"]
 T = 3
 EPOCHS_PER_STAGE = 5
 RESULTS_DIR = Path("results")
@@ -25,8 +25,8 @@ def build_configs() -> list[tuple[str, Callable[[], nn.Module]]]:
     configs: list[tuple[str, Callable[[], nn.Module]]] = [
         ("cnn_control", CNN),
         # T=1: mode is irrelevant, see autapse.AutapticLayer.
-        ("fcnn_control_relu", lambda: FCNN(T=1, mode="output_diff", scheme="relu_sigmoid")),
-        ("fcnn_control_sigmoid", lambda: FCNN(T=1, mode="output_diff", scheme="sigmoid")),
+        ("fcnn_control_relu", lambda: FCNN(T=1, mode="ai2_diff", scheme="relu_sigmoid")),
+        ("fcnn_control_sigmoid", lambda: FCNN(T=1, mode="ai2_diff", scheme="sigmoid")),
     ]
     for scheme in SCHEMES:
         for mode in MODES:
