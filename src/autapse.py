@@ -60,21 +60,27 @@ class AutapticLayer(nn.Module):
     def get_f_activation(self):
         if self.scheme == "sigmoid":
             f_activation = torch.sigmoid
-        else:
+        elif self.scheme == "relu_sigmoid":
             f_activation = torch.relu
+        else:
+            raise ValueError(f"Unknown scheme {self.scheme}")
         return f_activation
 
     def get_y_self(self, y):
         if self.scheme == "sigmoid":
             y_self = y
         else:
-            y_self = torch.tanh(y/2)
+            y_self = torch.tanh(y / 2)
         return y_self
 
-    #TODO
+    # TODO
     def _step(self, x: torch.Tensor, y_self: torch.Tensor, f_activation) -> torch.Tensor:
-        y_raw = f_activation(self.linear(x))
+        y = f_activation(self.linear(x))
         if self.mode == "ai2_diff":
-            y = y_raw - y_self
+            y_tilde = y - y_self
             return torch.relu(y) if self.scheme == "relu_sigmoid" else y
-        return y_raw * (1 - y_self)  # ai2_gate
+        elif self.mode == "ai2_gate":
+            y_tilde = y * (1 - y_self)  # ai2_gate
+        else:
+            raise ValueError(f"Unknown mode {self.mode}")
+        return y_tilde
