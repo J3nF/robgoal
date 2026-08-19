@@ -49,24 +49,24 @@ class AutapticLayer(nn.Module):
         self.scheme = scheme
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        f_activation = self.get_f_activation()
+        y_activation = self.get_y_activation()
         y_self = x.new_zeros(x.shape[0], self.linear.out_features)
-        y = self._step(x, y_self, f_activation)  # Get uninhibited activation
+        y = self._step(x, y_self, y_activation)  # Get uninhibited activation
         for _ in range(self.T - 1):
-            y_self = self.get_y_self(y)
-            y = self._step(x, y_self, f_activation)
+            y_self = self.get_y_self_activation(y)
+            y = self._step(x, y_self, y_activation)
         return y
 
-    def get_f_activation(self):
+    def get_y_activation(self):
         if self.scheme == "sigmoid":
-            f_activation = torch.sigmoid
+            y_activation = torch.sigmoid
         elif self.scheme == "relu_sigmoid":
-            f_activation = torch.relu
+            y_activation = torch.relu
         else:
             raise ValueError(f"Unknown scheme {self.scheme}")
-        return f_activation
+        return y_activation
 
-    def get_y_self(self, y):
+    def get_y_self_activation(self, y):
         if self.scheme == "sigmoid":
             y_self = y
         elif self.scheme == "relu_sigmoid":
@@ -75,10 +75,12 @@ class AutapticLayer(nn.Module):
             raise ValueError(f"Unknown scheme {self.scheme}")
         return y_self
 
-    # TODO
-    def _step(self, x: torch.Tensor, y_self: torch.Tensor, f_activation) -> torch.Tensor:
-        y = f_activation(self.linear(x))
+    def _step(self, x: torch.Tensor, y_self: torch.Tensor, y_activation) -> torch.Tensor:
+        y = y_activation(self.linear(x))
         if self.mode == "ai2_diff":
             y_tilde = y - y_self
-            return torch.relu(y) if self.scheme == "relu_sigmoid" else y
-        return y * (1- y_self)
+        elif self.mode == "ai2_gate":
+            y_tilde = y * (1 - y_self)
+        else:
+            raise ValueError(f"Unknown ai2 mode {self.mode}")
+        return y_tilde

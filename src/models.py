@@ -6,10 +6,10 @@ from torch import nn
 from autapse import AutapticLayer, AI2_Variant, Activation_Scheme
 
 
-class FCNN(nn.Module):
+class FCNN_AI2(nn.Module):
     """784-256-128-10 MLP whose hidden layers are `AutapticLayer`s.
 
-    `T=1` gives the FCNN controls (tests 2-3); see `autapse.AutapticLayer`
+    `T=1` gives the FCNN_AI2 controls (tests 2-3); see `autapse.AutapticLayer`
     for why mode is irrelevant there.
 
     Args:

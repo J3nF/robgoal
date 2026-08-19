@@ -154,7 +154,7 @@ The coming week is going to include implementation!
 - Have run MNIST experiments for
   - CNN
   - Fully connected NN
-  - 3 autapsic FCNN implementation.
+  - 3 autapsic FCNN_AI2 implementation.
       $$\begin{align}
         \tilde b_i(t) &= b_i(t) - b_i(t-1)\\
         \tilde y_i(t) &= y_i(t) - y_i(t-1)\\

@@ -70,3 +70,5 @@ def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:
         )
         lines.append(f"{stage_idx:>5} | {row}")
     return "\n".join(lines)
+
+# TODO: Add "dynamics_insights.py" (or so)-named file recording y_self dynamics.

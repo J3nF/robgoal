@@ -10,29 +10,29 @@ from torch import nn
 from autapse import AI2_Variant, Activation_Scheme
 from data import STAGE_DIGITS, build_stages, get_mnist_data
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
-from models import CNN, FCNN
+from models import CNN, FCNN_AI2
 from train import run_incremental_training
 
 MODES: list[Mode] = ["ai2_diff", "ai2_gate"]
 SCHEMES: list[Activation_Scheme] = ["sigmoid", "relu_sigmoid"]
 T = 3
 EPOCHS_PER_STAGE = 5
-RESULTS_DIR = Path("results")
+RESULTS_DIR = Path("../results")
 
 
 def build_configs() -> list[tuple[str, Callable[[], nn.Module]]]:
     """The 7 tests: 3 controls (no self-inhibition) + 2 modes x 2 schemes."""
     configs: list[tuple[str, Callable[[], nn.Module]]] = [
         ("cnn_control", CNN),
-        # T=1: mode is irrelevant, see autapse.AutapticLayer.
-        ("fcnn_control_relu", lambda: FCNN(T=1, mode="ai2_diff", scheme="relu_sigmoid")),
-        ("fcnn_control_sigmoid", lambda: FCNN(T=1, mode="ai2_diff", scheme="sigmoid")),
+        # Skip ai2 inhibition by setting T=1
+        ("fcnn_control_relu", lambda: FCNN_AI2(T=1, mode="ai2_diff", scheme="relu_sigmoid")),
+        ("fcnn_control_sigmoid", lambda: FCNN_AI2(T=1, mode="ai2_diff", scheme="sigmoid")),
     ]
     for scheme in SCHEMES:
         for mode in MODES:
             name = f"fcnn_{mode}_{scheme}"
             configs.append(
-                (name, lambda mode=mode, scheme=scheme: FCNN(T=T, mode=mode, scheme=scheme))
+                (name, lambda mode=mode, scheme=scheme: FCNN_AI2(T=T, mode=mode, scheme=scheme))
             )
     return configs
 
@@ -43,8 +43,9 @@ def main() -> None:
     stages = build_stages(train_data, test_data)
     first_stage_digits = frozenset(STAGE_DIGITS[0])
     RESULTS_DIR.mkdir(exist_ok=True)
+    configs = build_configs()
 
-    for name, model_fn in build_configs():
+    for name, model_fn in configs:
         model = model_fn()
         accuracy_by_stage = run_incremental_training(model, stages, device, EPOCHS_PER_STAGE)
         (RESULTS_DIR / f"{name}.json").write_text(json.dumps(accuracy_by_stage, indent=2))

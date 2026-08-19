@@ -77,7 +77,7 @@ $$\begin{align}
 
 The following describes choices made while translating above's framework into code.
 Notice how none of the following is the *correct* approach, but a choice.
-Also note the implied techincal debt.
+Also note the implied technical debt.
 
 ### Time-based inhibition in static-image classifiers
 
@@ -125,7 +125,7 @@ I wish to run both of the above-described activation schemes.
 Further defaults:
 
 - Autapse applies to **hidden layers only** — output logits stay a plain `Linear`.
-- The unroll depth `T` (unroll depth) is a small default at first; generally, consider it a controll parameter.
+- The unroll depth `T` (unroll depth) is a small default at first; generally, consider it a control parameter.
 
 ### Class-incremental data protocol
 
@@ -158,9 +158,9 @@ TODO Since any digit introduced later has no stage-0 accuracy to regress from, i
 | # | Model | Scheme | Notes |
 | --- | ------- | -------- | ------- |
 | 1 | CNN control | ReLU | small conv net (2×conv+pool+FC), no recurrence |
-| 2 | FCNN control | ReLU | 784→256→128→10, plain ReLU (= `relu_sigmoid` autapse layer at `T=1`) |
-| 3 | FCNN control | sigmoid | same skeleton, plain sigmoid (= `sigmoid` autapse layer at `T=1`) |
-| 4 | FCNN + `ai2_diff` | sigmoid | `y(t) = y_raw(t) - y(t-1)` |
-| 5 | FCNN + `ai2_gate` | sigmoid | `y(t) = y_raw(t) * (1 - y(t-1))` |
-| 6 | FCNN + `ai2_diff` | relu_sigmoid| `y(t) = relu(y_raw(t) - tanh(y(t-1)/2))` |
-| 7 | FCNN + `ai2_gate` | relu_sigmoid| `y(t) = relu(y_raw(t)) * (1 - tanh(y(t-1)/2))` |
+| 2 | FCNN_AI2 control | ReLU | 784→256→128→10, plain ReLU (= `relu_sigmoid` autapse layer at `T=1`) |
+| 3 | FCNN_AI2 control | sigmoid | same skeleton, plain sigmoid (= `sigmoid` autapse layer at `T=1`) |
+| 4 | FCNN_AI2 + `ai2_diff` | sigmoid | `y(t) = y_raw(t) - y(t-1)` |
+| 5 | FCNN_AI2 + `ai2_gate` | sigmoid | `y(t) = y_raw(t) * (1 - y(t-1))` |
+| 6 | FCNN_AI2 + `ai2_diff` | relu_sigmoid| `y(t) = relu(y_raw(t) - tanh(y(t-1)/2))` |
+| 7 | FCNN_AI2 + `ai2_gate` | relu_sigmoid| `y(t) = relu(y_raw(t)) * (1 - tanh(y(t-1)/2))` |
