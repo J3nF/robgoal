@@ -26,6 +26,7 @@ Lab book recording experiments with *autapsic inhibition AI (ai2 )* networks, as
   => $\tilde y_i =$ ai2-adapted activity/output;\
   => $y^\text{self}_i =$ neuron i's autapsis activity at input time $t$;
 - $b_i =$ $i$'s bias.
+- An equations or algorithm implementing ai2 is called an ai2 *variant*.
 
 ### Possible implementations
 
@@ -92,9 +93,9 @@ Note how, for `T=1`, ai2 networks reduce to a plain layer.
 ### Activation functions: ReLU and Sigmoids
 
 A priori, activation functions bound to $[0,1]$ match intuitions of thinking about relative inhibition, and seem closer to biological spiking neural networks (as in, there is a maximum signal (density)).
-Further, some ai2 schemes need boundedness to keep the adapted ouput in the activation function's domain (e.g., keeping $1-y(t-1)$ positive).
+Further, some ai2 variants need boundedness to keep the adapted ouput in the activation function's domain (e.g., keeping $1-y(t-1)$ positive).
 
-Yet, contrasting bound activation functions with ReLU activations used by our controls result in an apples-to-oranges comparison, and, more troublingly, makes some ai2 schemes converge to 0 during rollout (again, consider $1-y(t-1)$, which can only decrease $\tilde{y}_(t)$ for positive-only outputs).
+Yet, contrasting bound activation functions with ReLU activations used by our controls result in an apples-to-oranges comparison, and, more troublingly, makes some ai2 variants converge to 0 during rollout (again, consider $1-y(t-1)$, which can only decrease $\tilde{y}_(t)$ for positive-only outputs).
 
 Especially the latter incompatibility's problematicness may be interpreted two ways: Either the ai2 formulations, or activation functions, are a bad choice, given the other.
 
@@ -151,11 +152,18 @@ A blank cell would mean a caller passed only a some digits -- which, while toler
 We also track backwards transfer, i.e., the accuracy drop on the intial digits introduced between stage 0 and the final stage.
 TODO Since any digit introduced later has no stage-0 accuracy to regress from, it only makes sense to pass initial digits (which is not checked for currently!).
 
+### Optimisers: Adam vs SGD
+
+Initial tests, using Adam, returned practically undistinguishible of control and ai2 variants.
+We suspect Adam's momentum and adaptive learning to cover up the slightly changed loss landscape.
+
+In order to make sure ai2 is able to meaningfully change the loss landscape, we choose SGD explicitly because of its sensitivity to local loss.
+
 ## Implemented tests
 
 3 controls (no self-inhibition) + 2 formula variants × 2 activation schemes.
 
-| # | Model | Scheme | Notes |
+| # | Model | Activation_Scheme | Notes |
 | --- | ------- | -------- | ------- |
 | 1 | CNN control | ReLU | small conv net (2×conv+pool+FC), no recurrence |
 | 2 | FCNN_AI2 control | ReLU | 784→256→128→10, plain ReLU (= `relu_sigmoid` autapse layer at `T=1`) |

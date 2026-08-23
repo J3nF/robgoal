@@ -3,26 +3,30 @@
 import pytest
 import torch
 
-from autapse import AutapticLayer, AI2_Variant, Activation_Scheme
+from autapse import Activation_Scheme, AI2_Variant, AutapticLayer
 
-MODES: list[Mode] = ["ai2_diff", "ai2_gate"]
+VARIANTS: list[AI2_Variant] = ["ai2_diff", "ai2_gate"]
 SCHEMES: list[Activation_Scheme] = ["sigmoid", "relu_sigmoid"]
 
 
-@pytest.mark.parametrize("scheme", SCHEMES)
-@pytest.mark.parametrize("mode", MODES)
-def test_t1_degenerates_to_plain_layer(mode: AI2_Variant, scheme: Activation_Scheme) -> None:
-    layer = AutapticLayer(4, 3, T=1, mode=mode, scheme=scheme)
+@pytest.mark.parametrize("activation_scheme", SCHEMES)
+@pytest.mark.parametrize("ai2_variant", VARIANTS)
+def test_t1_degenerates_to_plain_layer(
+    ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
+) -> None:
+    layer = AutapticLayer(4, 3, T=1, ai2_variant=ai2_variant, activation_scheme=activation_scheme)
     x = torch.randn(2, 4)
-    activation = torch.sigmoid if scheme == "sigmoid" else torch.relu
+    activation = torch.sigmoid if activation_scheme == "sigmoid" else torch.relu
     expected = activation(layer.linear(x))
     assert torch.allclose(layer(x), expected, atol=1e-6)
 
 
-@pytest.mark.parametrize("scheme", SCHEMES)
-@pytest.mark.parametrize("mode", MODES)
-def test_gradients_flow_through_unroll(mode: AI2_Variant, scheme: Activation_Scheme) -> None:
-    layer = AutapticLayer(4, 3, T=3, mode=mode, scheme=scheme)
+@pytest.mark.parametrize("activation_scheme", SCHEMES)
+@pytest.mark.parametrize("ai2_variant", VARIANTS)
+def test_gradients_flow_through_unroll(
+    ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
+) -> None:
+    layer = AutapticLayer(4, 3, T=3, ai2_variant=ai2_variant, activation_scheme=activation_scheme)
     x = torch.randn(2, 4, requires_grad=True)
     layer(x).sum().backward()
     assert x.grad is not None and x.grad.abs().sum() > 0
@@ -37,8 +41,10 @@ BOUNDED_COMBOS: list[tuple[AI2_Variant, Activation_Scheme]] = [
 ]
 
 
-@pytest.mark.parametrize("mode,scheme", BOUNDED_COMBOS)
-def test_output_never_exceeds_raw_activation(mode: AI2_Variant, scheme: Activation_Scheme) -> None:
+@pytest.mark.parametrize("ai2_variant,activation_scheme", BOUNDED_COMBOS)
+def test_output_never_exceeds_raw_activation(
+    ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
+) -> None:
     """0 <= y <= y_raw, for every combo except `ai2_diff` + `sigmoid`.
 
     That combo has no such guarantee: `sigmoid` never clips the difference
@@ -46,10 +52,10 @@ def test_output_never_exceeds_raw_activation(mode: AI2_Variant, scheme: Activati
     convergence problem lab-book.md's "Activation functions" section
     discusses, and why `relu_sigmoid` exists.
     """
-    layer = AutapticLayer(4, 3, T=5, mode=mode, scheme=scheme)
+    layer = AutapticLayer(4, 3, T=5, ai2_variant=ai2_variant, activation_scheme=activation_scheme)
     x = torch.randn(8, 4) * 10  # large magnitude to stress the gate
     y = layer(x)
-    activation = torch.sigmoid if scheme == "sigmoid" else torch.relu
+    activation = torch.sigmoid if activation_scheme == "sigmoid" else torch.relu
     y_raw = activation(layer.linear(x))
     assert torch.all(y >= 0)
     assert torch.all(y <= y_raw + 1e-6)

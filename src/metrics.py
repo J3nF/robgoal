@@ -49,9 +49,9 @@ def backward_transfer(
     """
     first_stage_accuracy = accuracy_by_stage[0]
     final_stage_accuracy = accuracy_by_stage[-1]
-    return sum(
-        final_stage_accuracy[d] - first_stage_accuracy[d] for d in first_stage_digits
-    ) / len(first_stage_digits)
+    return sum(final_stage_accuracy[d] - first_stage_accuracy[d] for d in first_stage_digits) / len(
+        first_stage_digits
+    )
 
 
 def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:
@@ -70,5 +70,6 @@ def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:
         )
         lines.append(f"{stage_idx:>5} | {row}")
     return "\n".join(lines)
+
 
 # TODO: Add "dynamics_insights.py" (or so)-named file recording y_self dynamics.

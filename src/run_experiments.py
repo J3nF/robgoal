@@ -7,13 +7,13 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from autapse import AI2_Variant, Activation_Scheme
+from autapse import Activation_Scheme, AI2_Variant
 from data import STAGE_DIGITS, build_stages, get_mnist_data
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from models import CNN, FCNN_AI2
 from train import run_incremental_training
 
-MODES: list[Mode] = ["ai2_diff", "ai2_gate"]
+VARIANTS: list[AI2_Variant] = ["ai2_diff", "ai2_gate"]
 SCHEMES: list[Activation_Scheme] = ["sigmoid", "relu_sigmoid"]
 T = 3
 EPOCHS_PER_STAGE = 5
@@ -21,18 +21,29 @@ RESULTS_DIR = Path("../results")
 
 
 def build_configs() -> list[tuple[str, Callable[[], nn.Module]]]:
-    """The 7 tests: 3 controls (no self-inhibition) + 2 modes x 2 schemes."""
+    """The 7 tests: 3 controls (no self-inhibition) + 2 variants x 2 schemes."""
     configs: list[tuple[str, Callable[[], nn.Module]]] = [
         ("cnn_control", CNN),
         # Skip ai2 inhibition by setting T=1
-        ("fcnn_control_relu", lambda: FCNN_AI2(T=1, mode="ai2_diff", scheme="relu_sigmoid")),
-        ("fcnn_control_sigmoid", lambda: FCNN_AI2(T=1, mode="ai2_diff", scheme="sigmoid")),
+        (
+            "fcnn_control_relu",
+            lambda: FCNN_AI2(T=1, ai2_variant="ai2_diff", activation_scheme="relu_sigmoid"),
+        ),
+        (
+            "fcnn_control_sigmoid",
+            lambda: FCNN_AI2(T=1, ai2_variant="ai2_diff", activation_scheme="sigmoid"),
+        ),
     ]
-    for scheme in SCHEMES:
-        for mode in MODES:
-            name = f"fcnn_{mode}_{scheme}"
+    for activation_scheme in SCHEMES:
+        for ai2_variant in VARIANTS:
+            name = f"fcnn_{ai2_variant}_{activation_scheme}"
             configs.append(
-                (name, lambda mode=mode, scheme=scheme: FCNN_AI2(T=T, mode=mode, scheme=scheme))
+                (
+                    name,
+                    lambda ai2_variant=ai2_variant, activation_scheme=activation_scheme: FCNN_AI2(
+                        T=T, ai2_variant=ai2_variant, activation_scheme=activation_scheme
+                    ),
+                )
             )
     return configs
 

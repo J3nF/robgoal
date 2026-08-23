@@ -26,7 +26,7 @@ def run_incremental_training(
         per stage, evaluated on the full test set right after that stage.
     """
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr) #TODO: Think about alternatives -- SGD would be purer
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)  # Note default momentum = 0
     criterion = nn.CrossEntropyLoss()
 
     accuracy_by_stage = []

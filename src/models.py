@@ -3,25 +3,27 @@
 import torch
 from torch import nn
 
-from autapse import AutapticLayer, AI2_Variant, Activation_Scheme
+from autapse import Activation_Scheme, AI2_Variant, AutapticLayer
 
 
 class FCNN_AI2(nn.Module):
     """784-256-128-10 MLP whose hidden layers are `AutapticLayer`s.
 
     `T=1` gives the FCNN_AI2 controls (tests 2-3); see `autapse.AutapticLayer`
-    for why mode is irrelevant there.
+    for why ai2_variant is irrelevant there.
 
     Args:
         T: Number of internal unroll steps.
-        mode: Inhibition mode, see `autapse.AutapticLayer`.
-        scheme: Activation scheme, see `autapse.AutapticLayer`.
+        ai2_variant: Inhibition variant, see `autapse.AutapticLayer`.
+        activation_scheme: Activation scheme, see `autapse.AutapticLayer`.
     """
 
-    def __init__(self, T: int, mode: AI2_Variant, scheme: Activation_Scheme) -> None:
+    def __init__(
+        self, T: int, ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
+    ) -> None:
         super().__init__()
-        self.hidden1 = AutapticLayer(28 * 28, 256, T, mode, scheme)
-        self.hidden2 = AutapticLayer(256, 128, T, mode, scheme)
+        self.hidden1 = AutapticLayer(28 * 28, 256, T, ai2_variant, activation_scheme)
+        self.hidden2 = AutapticLayer(256, 128, T, ai2_variant, activation_scheme)
         self.output = nn.Linear(128, 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

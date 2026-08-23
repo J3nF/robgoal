@@ -18,7 +18,7 @@ Class-incremental MNIST, cumulative (`data.py`):
 
 One class, `AutapticLayer`, covering 2 inhibition modes × 2 activation schemes,
 with a `T`-step unroll per forward call. `mode` and `scheme` are `Literal` type
-aliases exported from the module (`Mode`, `Scheme`); see the module's own
+aliases exported from the module (`AI2_Variant`, `Activation_Scheme`); see the module's own
 docstrings for the exact per-mode/scheme formulas — not duplicated here so this
 doc can't drift out of sync with the code again.
 
