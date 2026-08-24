@@ -12,7 +12,7 @@ import torch
 from torch import nn
 
 from data import Stage
-from dynamics_insights import get_y_self_magnitudes
+from dynamics_insights import get_y_self_absmeans, get_y_self_per_neuron
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from run_config import RunConfig
 from train import run_incremental_training
@@ -78,13 +78,18 @@ def _train_with_logging(
     Owns `accuracy_by_stage`'s full lifecycle: creates it, passes it to
     `_make_on_stage_end` to mutate in place, and returns the finished list --
     keeps that mutation contained here rather than exposing it across
-    `run_and_log`'s boundary.
+    `run_and_log`'s boundary. Also owns the optional per-neuron y_self
+    histories (see `RunConfig.capture_y_self_per_epoch`/`per_batch`): builds
+    them, logs them as MLflow artifacts once training finishes, and doesn't
+    expose them past this function either.
 
     Returns:
         The per-stage accuracy dicts (see `train.run_incremental_training`)
         and wall-clock training time in seconds.
     """
     accuracy_by_stage: list[dict[int, float]] = []
+    y_self_epoch_history: list[dict] | None = [] if config.capture_y_self_per_epoch else None
+    y_self_batch_history: list[dict] | None = [] if config.capture_y_self_per_batch else None
     start_time = time.perf_counter()
     run_incremental_training(
         model,
@@ -93,21 +98,34 @@ def _train_with_logging(
         epochs_per_stage=config.epochs_per_stage,
         lr=config.lr,
         batch_size=config.batch_size,
-        on_epoch_end=_make_on_epoch_end(model, config.epochs_per_stage),
+        on_epoch_end=_make_on_epoch_end(model, config.epochs_per_stage, y_self_epoch_history),
         on_stage_end=_make_on_stage_end(stages, accuracy_by_stage),
+        on_batch_end=_make_on_batch_end(model, y_self_batch_history)
+        if y_self_batch_history is not None
+        else None,
     )
     train_seconds = time.perf_counter() - start_time
+    _log_y_self_history(y_self_epoch_history, "y_self_per_neuron_epoch.json")
+    _log_y_self_history(y_self_batch_history, "y_self_per_neuron_batch.json")
     return accuracy_by_stage, train_seconds
 
 
 def _make_on_epoch_end(
-    model: nn.Module, epochs_per_stage: int
+    model: nn.Module, epochs_per_stage: int, y_self_history: list[dict] | None
 ) -> Callable[[int, int, float], None]:
-    """Builds an `on_epoch_end` callback logging `train_loss` and per-layer y_self magnitude.
+    """Builds an `on_epoch_end` callback logging `train_loss` and per-layer y_self absmean,
+    and optionally appending a per-neuron y_self snapshot to `y_self_history`.
 
     epochs_per_stage: needed to compute a stage-spanning step index
         (`stage_index * epochs_per_stage + epoch_index`) so MLflow's x-axis
-        is continuous across stages, not reset each stage.
+        is continuous across stages, not reset each stage -- valid here since
+        `epochs_per_stage` is one constant applied uniformly to every stage.
+
+    Mutates `y_self_history` in place (appends) when not `None` -- an
+    explicit, documented exception to STYLE.md's mutation-avoidance rule,
+    matching `_make_on_stage_end`'s `accuracy_by_stage` precedent: this
+    callback is the only place a fresh epoch snapshot becomes available, so
+    accumulating here is unavoidable without restructuring the training loop.
     """
 
     def on_epoch_end(stage_index: int, epoch_index: int, avg_loss: float) -> None:
@@ -116,10 +134,48 @@ def _make_on_epoch_end(
         # Last-batch-of-the-epoch snapshot, not a proper epoch-weighted
         # average like avg_loss -- averaging would need train.py to know
         # AutapticLayer exists, which its callback-based design avoids.
-        for layer_name, magnitude in get_y_self_magnitudes(model).items():
-            mlflow.log_metric(f"y_self_magnitude_{layer_name}", magnitude, step=step)
+        for layer_name, absmean in get_y_self_absmeans(model).items():
+            mlflow.log_metric(f"y_self_absmean_{layer_name}", absmean, step=step)
+        if y_self_history is not None:
+            # CNN models have no AutapticLayer, so get_y_self_per_neuron
+            # returns {} -- the appended record is content-free but still
+            # appended, keeping this history's length meaningful.
+            y_self_history.append({"step": step, "y_self": get_y_self_per_neuron(model)})
 
     return on_epoch_end
+
+
+def _make_on_batch_end(
+    model: nn.Module, y_self_history: list[dict]
+) -> Callable[[int, int, int], None]:
+    """Builds an `on_batch_end` callback appending a per-neuron y_self snapshot per batch.
+
+    Ignores `stage_index`/`epoch_index` -- the incremental-digit protocol is
+    cumulative (see data.STAGE_DIGITS), so each stage's batch count differs
+    and there's no fixed per-stage batch count to compute a step index from.
+    Uses `step = len(y_self_history)` instead: `run_incremental_training`'s
+    loop is single-threaded and strictly sequential, so append order is
+    already chronological across the whole run.
+
+    Mutates `y_self_history` in place (appends) -- same documented exception
+    to STYLE.md's mutation-avoidance rule as `_make_on_epoch_end` above.
+    """
+
+    def on_batch_end(stage_index: int, epoch_index: int, batch_index: int) -> None:
+        del stage_index, epoch_index, batch_index
+        y_self_history.append({"step": len(y_self_history), "y_self": get_y_self_per_neuron(model)})
+
+    return on_batch_end
+
+
+def _log_y_self_history(history: list[dict] | None, artifact_file: str) -> None:
+    """Logs `history` as a JSON artifact under `artifact_file` if it's non-empty.
+
+    Nested under a "records" key -- `mlflow.log_dict`'s documented contract is
+    `dict[str, Any]`, not a bare list.
+    """
+    if history:
+        mlflow.log_dict({"records": history}, artifact_file)
 
 
 def _make_on_stage_end(

@@ -28,6 +28,11 @@ class RunConfig:
         activation_scheme: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         T: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         hidden_sizes: `None` for `model_kind="cnn"`; required for `"fcnn"`.
+        capture_y_self_per_epoch: Log a per-neuron y_self history artifact,
+            one snapshot per epoch. See `dynamics_insights.get_y_self_per_neuron`.
+        capture_y_self_per_batch: Log a per-neuron y_self history artifact,
+            one snapshot per training batch. Opt-in: on a full sweep this can
+            accumulate a large number of records.
     """
 
     name: str
@@ -41,3 +46,5 @@ class RunConfig:
     activation_scheme: Activation_Scheme | None = None
     T: int | None = None
     hidden_sizes: tuple[int, ...] | None = None
+    capture_y_self_per_epoch: bool = False
+    capture_y_self_per_batch: bool = False

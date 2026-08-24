@@ -46,7 +46,7 @@ class AutapticLayer(nn.Module):
             inhibition took place, matching this class's `T=1` degeneracy).
             A plain tensor attribute, not a parameter or buffer -- doesn't
             affect `state_dict()`, `.parameters()`, or gradients; see
-            `dynamics_insights.get_y_self_magnitudes`.
+            `dynamics_insights.get_y_self_absmeans`.
     """
 
     def __init__(

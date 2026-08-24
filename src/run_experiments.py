@@ -15,9 +15,7 @@ from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from run_config import RunConfig
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# Seed replicates per config, for variance estimates -- e.g. 3 turns the 14
-# configs in sweep.py into 42 runs. 1 (default) reproduces the single-seed
-# sweep exactly: no nesting, no aggregation, same run names.
+# Set number of seed replicates per config for variance estimates to default 1.
 NUM_SEEDS = 1
 RESULTS_DIR = REPO_ROOT / "results"
 
