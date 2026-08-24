@@ -18,9 +18,6 @@ from run_config import RunConfig
 from train import run_incremental_training
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# Plain filesystem tracking ("file:./mlruns") is in maintenance mode as of
-# MLflow 3.15 and raises unless MLFLOW_ALLOW_FILE_STORE is set -- use the
-# recommended sqlite backend instead, see lab-book.md, "Logging: MLflow".
 TRACKING_URI = f"sqlite:///{REPO_ROOT / 'mlflow.db'}"
 ARTIFACT_LOCATION = f"file:{REPO_ROOT / 'mlartifacts'}"
 EXPERIMENT_NAME = "ai2-mnist"
