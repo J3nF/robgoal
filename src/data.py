@@ -56,7 +56,6 @@ def get_mnist_data(root: str = "data") -> tuple[LabeledDataset, LabeledDataset]:
     ssl._create_default_https_context = (  # ty: ignore[invalid-assignment]
         lambda *a, **kw: ssl.create_default_context(cafile=certifi.where())
     )
-
     transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
@@ -90,7 +89,8 @@ def _build_stage(
         cast(Dataset[tuple[torch.Tensor, int]], train_data),
         _get_digit_indices(train_data, digits_seen),
     )
-    return Stage(stage_idx, digits_seen, train_subset, test_data)
+    stage = Stage(stage_idx, digits_seen, train_subset, test_data)
+    return stage
 
 
 def _get_digit_indices(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:
