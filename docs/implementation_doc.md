@@ -81,13 +81,13 @@ circular import.
 
 ## Dynamics: `dynamics_insights.py`
 
-`get_y_self_magnitudes(model) -> dict[str, float]`: mean `|y_self|` of each
+`get_y_self_absmeans(model) -> dict[str, float]`: mean `|y_self|` of each
 `AutapticLayer`'s last forward call (`autapse.py`'s `last_y_self`), keyed by
 submodule name (e.g. `"hidden_layers.0"`). Skips layers with no forward pass
 yet and models with no `AutapticLayer`s (e.g. `CNN`) — returns `{}` for
 either, not an error, since both are legitimate call states.
 `logged_training.py`'s `on_epoch_end` calls this every epoch to log
-`y_self_magnitude_{layer_name}`; see lab-book.md's wishlist (distributed vs.
+`y_self_absmean_{layer_name}`; see lab-book.md's wishlist (distributed vs.
 sparse representations) for why this is worth tracking.
 
 Not a full epoch-weighted average like `train_loss` — it's a snapshot from
@@ -207,7 +207,7 @@ not this repo's custom training loop; see lab-book.md, "Logging: MLflow").
   `on_stage_end` callbacks built by `_make_on_epoch_end`/`_make_on_stage_end`,
   returns the accuracy list plus wall-clock seconds); `_log_final_metrics`
   (`train_seconds`, final accuracy/BWT, the accuracy-matrix text artifact).
-  `_make_on_epoch_end` logs `train_loss` and `y_self_magnitude_{layer_name}`
+  `_make_on_epoch_end` logs `train_loss` and `y_self_absmean_{layer_name}`
   per epoch (`dynamics_insights.py`). `_make_on_stage_end` logs per-digit
   accuracy, average accuracy (seen digits and all digits), and a running
   `backward_transfer` per stage (`0.0` at stage 0 by construction — the
@@ -290,7 +290,7 @@ modules, not implementation code.
   exactly `len(stages) * epochs_per_stage` times and `on_stage_end` exactly
   `len(stages)` times, on a tiny fake dataset (no real MNIST, no MLflow); and
   runs fine with both callbacks left at their default `None`.
-- `tests/test_dynamics_insights.py`: `get_y_self_magnitudes` is `0.0` for
+- `tests/test_dynamics_insights.py`: `get_y_self_absmeans` is `0.0` for
   every layer at `T=1` (degenerate case); nonzero for at least one layer at
   `T>1` with a fixed seed (deterministic, not "usually nonzero"); `{}` for a
   `CNN` and for a model with no forward pass yet.
@@ -309,7 +309,7 @@ modules, not implementation code.
   `monkeypatch.setattr` on `logged_training.TRACKING_URI`/
   `ARTIFACT_LOCATION`, with an autouse fixture draining any dangling active
   MLflow run between tests. Covers: params/metrics land correctly; y_self
-  magnitude metrics present for FCNN, absent for CNN; replicate-group
+  absmean metrics present for FCNN, absent for CNN; replicate-group
   aggregation matches an independently-computed mean/stdev; a mid-sweep
   failure skips aggregation and leaves the parent run FAILED;
   `replicate_group(config, 1)` raises before touching MLflow.

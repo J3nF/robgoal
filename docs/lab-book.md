@@ -171,8 +171,8 @@ Every run sets a fixed seed before model construction, so a config's result is a
 This does not equalize randomness *across* configs, though: data-loader shuffling keeps drawing from the same global RNG stream every epoch, so same-seed runs only match exactly through weight init and the first epoch -- from there different configs consume that stream at different rates (worst for the `epochs_per_stage` sweep specifically, since two configs advance it at genuinely different rates from stage 0's second epoch onward; their comparison isn't fully "all else equal").
 To get real variance estimates on top of this single-run reproducibility, I can also run each config as several seed replicates instead of one (off by default -- it multiplies total training runs, and I want fast single-seed iteration as the common case).
 
-I also now log each `AutapticLayer`'s inhibition-signal (`y_self`) magnitude per epoch -- a first, coarse readout toward the distributed-vs-sparse-representations wishlist at the top of this book.
-(?) It's a per-epoch snapshot, not a rigorous measure of "how distributed" activity is; still unclear what magnitude pattern would actually confirm or refute the wishlist.
+I also now log each `AutapticLayer`'s inhibition-signal (`y_self`) absoute mean per epoch -- a first, coarse readout toward the distributed-vs-sparse-representations wishlist at the top of this book.
+(?) It's a per-epoch snapshot, not a rigorous measure of "how distributed" activity is; still unclear what absoute mean pattern would actually confirm or refute the wishlist.
 
 TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight norms, to check the "SGD is sensitive to loss-landscape changes" reasoning above directly rather than inferring it from accuracy; `mlflow.enable_system_metrics_logging()` for CPU/GPU utilization, likely low value at this scale; a depth (not just width) sweep for `FCNN_AI2`, free now that `hidden_sizes` is a tuple of arbitrary length.
 

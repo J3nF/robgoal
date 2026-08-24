@@ -4,6 +4,28 @@ A multi-week project on implementing neural networks capable of robust goal-keep
 
 More detailed notes can be found in  the `docs` folder, particularly in `docs/Mini_project_meta_continual_learning.md`.
 
+## Architecture
+
+How the pieces in `src/` interact when running the sweep (see
+`docs/implementation_doc.md` for the full module-by-module breakdown):
+
+```mermaid
+flowchart LR
+    data[data.py] -->|Stages| orchestrator[run_experiments.py]
+    config[sweep.py<br/>+ run_config.py] -->|RunConfig, model| orchestrator
+    models[autapse.py<br/>+ models.py] -->|constructs CNN/FCNN_AI2| config
+    orchestrator -->|config, model, stages| logging[logged_training.py]
+    logging -->|callbacks| train[train.py]
+    train -->|loss, per-digit accuracy| logging
+    train --> metrics[metrics.py]
+    orchestrator --> metrics
+    logging --> metrics
+    logging --> dynamics[dynamics_insights.py]
+    models -.->|last_y_self| dynamics
+    logging -->|params/metrics/artifacts| mlflow[(MLflow:<br/>mlflow.db, mlartifacts/)]
+    orchestrator -->|per-run JSON| results[(results/*.json)]
+```
+
 ## Set-up
 
 Use [`uv`](https://docs.astral.sh/uv/), together with the preferred Pytorch version (CPU-only or CUDA), to reproduce our Python environment:
@@ -59,6 +81,7 @@ then open `http://localhost:5000`.
   `src/` importable (see `docs/implementation_doc.md`, "Files") — save this
   as a script under `src/` and run it from the repo root, or run
   `PYTHONPATH=src uv run python -c "..."`:
+
   ```python
   import torch
   from data import build_stages, get_mnist_data
