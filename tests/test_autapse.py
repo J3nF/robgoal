@@ -26,6 +26,9 @@ def test_t1_degenerates_to_plain_layer(
 def test_gradients_flow_through_unroll(
     ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
 ) -> None:
+    # Fixed seed: an unlucky unseeded draw can put every ReLU pre-activation
+    # below 0, zeroing the gradient through no fault of the layer itself.
+    torch.manual_seed(0)
     layer = AutapticLayer(4, 3, T=3, ai2_variant=ai2_variant, activation_scheme=activation_scheme)
     x = torch.randn(2, 4, requires_grad=True)
     layer(x).sum().backward()

@@ -610,3 +610,12 @@ tags
 clifton
 
 results/*
+
+# MLflow local tracking (sqlite backend + artifact store), see
+# src/logged_training.py
+/mlflow.db
+/mlartifacts/
+# Safety net: MLflow's own default artifact_location for a NEW experiment is
+# cwd-relative ("./mlruns"), only avoided because logged_training.py sets it
+# explicitly -- ignore it too in case that ever silently stops applying.
+/mlruns/

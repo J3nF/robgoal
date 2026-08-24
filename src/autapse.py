@@ -4,6 +4,7 @@ Implementing two activation schemes and two inhibition variants.
 See `lab-book.md` for more details.
 """
 
+from collections.abc import Callable
 from typing import Literal
 
 import torch
@@ -35,6 +36,17 @@ class AutapticLayer(nn.Module):
             - "relu_sigmoid": unbounded ReLU output; inhibition signal is
               `tanh(y / 2)` instead of `sigmoid(y)`, see lab-book.md,
               "Activation functions".
+
+    Attributes:
+        last_y_self: The inhibition signal that fed the *last* unroll step of
+            the most recent `forward` call (i.e. `\\tilde y_i(T-1)` in
+            lab-book.md notation) -- the "settled" value the `T`-step unroll
+            exists to produce. `None` until `forward` has run at least once.
+            For `T=1`, stays the all-zeros initial value forever (no
+            inhibition took place, matching this class's `T=1` degeneracy).
+            A plain tensor attribute, not a parameter or buffer -- doesn't
+            affect `state_dict()`, `.parameters()`, or gradients; see
+            `dynamics_insights.get_y_self_magnitudes`.
     """
 
     def __init__(
@@ -52,17 +64,20 @@ class AutapticLayer(nn.Module):
         self.T = T
         self.ai2_variant = ai2_variant
         self.activation_scheme = activation_scheme
+        self.last_y_self: torch.Tensor | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y_activation = self.get_y_activation()
+        y_activation = self._get_y_activation()
         y_self = x.new_zeros(x.shape[0], self.linear.out_features)
         y = self._step(x, y_self, y_activation)  # Get uninhibited activation
         for _ in range(self.T - 1):
-            y_self = self.get_y_self_activation(y)
+            y_self = self._get_y_self_activation(y)
             y = self._step(x, y_self, y_activation)
+        self.last_y_self = y_self.detach()
         return y
 
-    def get_y_activation(self):
+    def _get_y_activation(self) -> Callable[[torch.Tensor], torch.Tensor]:
+        """The main-path activation for `activation_scheme`, see the class docstring."""
         if self.activation_scheme == "sigmoid":
             y_activation = torch.sigmoid
         elif self.activation_scheme == "relu_sigmoid":
@@ -71,7 +86,13 @@ class AutapticLayer(nn.Module):
             raise ValueError(f"Unknown activation_scheme {self.activation_scheme}")
         return y_activation
 
-    def get_y_self_activation(self, y):
+    def _get_y_self_activation(self, y: torch.Tensor) -> torch.Tensor:
+        """Derives next step's inhibition signal from this step's output `y`.
+
+        "sigmoid": the raw output. "relu_sigmoid": `tanh(y / 2)` instead, so
+        the signal stays in `[0, 1[` even though `y` is unbounded ReLU output
+        -- see lab-book.md, "Activation functions".
+        """
         if self.activation_scheme == "sigmoid":
             y_self = y
         elif self.activation_scheme == "relu_sigmoid":
@@ -80,12 +101,26 @@ class AutapticLayer(nn.Module):
             raise ValueError(f"Unknown activation_scheme {self.activation_scheme}")
         return y_self
 
-    def _step(self, x: torch.Tensor, y_self: torch.Tensor, y_activation) -> torch.Tensor:
-        y = y_activation(self.linear(x))
+    def _step(
+        self,
+        x: torch.Tensor,
+        y_self: torch.Tensor,
+        y_activation: Callable[[torch.Tensor], torch.Tensor],
+    ) -> torch.Tensor:
+        y = self._get_main_output(x, y_activation)
+        return self._get_inhibited_output(y, y_self)
+
+    def _get_main_output(
+        self, x: torch.Tensor, y_activation: Callable[[torch.Tensor], torch.Tensor]
+    ) -> torch.Tensor:
+        """The uninhibited, activated linear output for this unroll step."""
+        return y_activation(self.linear(x))
+
+    def _get_inhibited_output(self, y: torch.Tensor, y_self: torch.Tensor) -> torch.Tensor:
+        """Combines `y` with the inhibition signal `y_self` per `self.ai2_variant`."""
         if self.ai2_variant == "ai2_diff":
-            y_tilde = y - y_self
+            return y - y_self
         elif self.ai2_variant == "ai2_gate":
-            y_tilde = y * (1 - y_self)
+            return y * (1 - y_self)
         else:
             raise ValueError(f"Unknown ai2 variant {self.ai2_variant}")
-        return y_tilde

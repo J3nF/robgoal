@@ -75,13 +75,22 @@ def build_stages(train_data: LabeledDataset, test_data: LabeledDataset) -> list[
     digits_seen: set[int] = set()
     for stage_idx, new_digits in enumerate(STAGE_DIGITS):
         digits_seen |= set(new_digits)  # Combine to-be-seen digits in-place
-        digits_frozen = frozenset(digits_seen)
-        train_subset = Subset(
-            cast(Dataset[tuple[torch.Tensor, int]], train_data),
-            _get_digit_indices(train_data, digits_frozen),
-        )
-        stages.append(Stage(stage_idx, digits_frozen, train_subset, test_data))
+        stages.append(_build_stage(stage_idx, frozenset(digits_seen), train_data, test_data))
     return stages
+
+
+def _build_stage(
+    stage_idx: int,
+    digits_seen: frozenset[int],
+    train_data: LabeledDataset,
+    test_data: LabeledDataset,
+) -> Stage:
+    """Constructs one Stage: `digits_seen`'s train subset plus the full test set."""
+    train_subset = Subset(
+        cast(Dataset[tuple[torch.Tensor, int]], train_data),
+        _get_digit_indices(train_data, digits_seen),
+    )
+    return Stage(stage_idx, digits_seen, train_subset, test_data)
 
 
 def _get_digit_indices(dataset: LabeledDataset, digits: frozenset[int]) -> list[int]:

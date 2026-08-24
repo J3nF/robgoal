@@ -162,6 +162,19 @@ In order to make sure ai2 is able to meaningfully change the loss landscape, we 
 ### Logging: MLflow
 
 As the heading says, I use [MLflow's PyTorch integration](https://mlflow.org/docs/latest/ml/deep-learning/pytorch/) to log and, ideally, live-view run results.
+Concrete mechanics (what's logged, local backend choice, nested-run bookkeeping) are in `implementation_doc.md`, "Logging: `logged_training.py`" -- kept out of here so mechanical detail doesn't drown the reasoning below.
+
+Differentiating `ai2_variant` / `activation_scheme` / `T` / `epochs_per_stage` / hidden layer sizes: rather than a full cartesian grid over all five dimensions (144 runs, mostly uninformative combinations), I sweep `T`, `epochs_per_stage`, and `hidden_sizes` one-factor-at-a-time off a single anchor config, on top of the 7 base tests below.
+(?) The anchor choice and the sweep values themselves are guesses at an interesting range, not derived from anything.
+
+Every run sets a fixed seed before model construction, so a config's result is at least reproducible run-to-run.
+This does not equalize randomness *across* configs, though: data-loader shuffling keeps drawing from the same global RNG stream every epoch, so same-seed runs only match exactly through weight init and the first epoch -- from there different configs consume that stream at different rates (worst for the `epochs_per_stage` sweep specifically, since two configs advance it at genuinely different rates from stage 0's second epoch onward; their comparison isn't fully "all else equal").
+To get real variance estimates on top of this single-run reproducibility, I can also run each config as several seed replicates instead of one (off by default -- it multiplies total training runs, and I want fast single-seed iteration as the common case).
+
+I also now log each `AutapticLayer`'s inhibition-signal (`y_self`) magnitude per epoch -- a first, coarse readout toward the distributed-vs-sparse-representations wishlist at the top of this book.
+(?) It's a per-epoch snapshot, not a rigorous measure of "how distributed" activity is; still unclear what magnitude pattern would actually confirm or refute the wishlist.
+
+TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight norms, to check the "SGD is sensitive to loss-landscape changes" reasoning above directly rather than inferring it from accuracy; `mlflow.enable_system_metrics_logging()` for CPU/GPU utilization, likely low value at this scale; a depth (not just width) sweep for `FCNN_AI2`, free now that `hidden_sizes` is a tuple of arbitrary length.
 
 ## Implemented tests
 
@@ -176,3 +189,5 @@ As the heading says, I use [MLflow's PyTorch integration](https://mlflow.org/doc
 | 5 | FCNN_AI2 + `ai2_gate` | sigmoid | `y(t) = y_raw(t) * (1 - y(t-1))` |
 | 6 | FCNN_AI2 + `ai2_diff` | relu_sigmoid| `y(t) = relu(y_raw(t) - tanh(y(t-1)/2))` |
 | 7 | FCNN_AI2 + `ai2_gate` | relu_sigmoid| `y(t) = relu(y_raw(t)) * (1 - tanh(y(t-1)/2))` |
+
+On top of these 7, `run_experiments.py` runs 7 more: a one-factor-at-a-time sweep over `T` (`{2,5,8}`), `epochs_per_stage` (`{2,10}`), and `hidden_sizes` (`{(64,32),(512,256)}`), off test 6 as the anchor -- see "Logging: MLflow" above for why one-factor-at-a-time over a full grid, and its caveats.

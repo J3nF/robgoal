@@ -7,7 +7,7 @@ from autapse import Activation_Scheme, AI2_Variant, AutapticLayer
 
 
 class FCNN_AI2(nn.Module):
-    """784-256-128-10 MLP whose hidden layers are `AutapticLayer`s.
+    """784-...-10 MLP whose hidden layers are `AutapticLayer`s.
 
     `T=1` gives the FCNN_AI2 controls (tests 2-3); see `autapse.AutapticLayer`
     for why ai2_variant is irrelevant there.
@@ -16,20 +16,28 @@ class FCNN_AI2(nn.Module):
         T: Number of internal unroll steps.
         ai2_variant: Inhibition variant, see `autapse.AutapticLayer`.
         activation_scheme: Activation scheme, see `autapse.AutapticLayer`.
+        hidden_sizes: Output width of each hidden `AutapticLayer`, in order.
     """
 
     def __init__(
-        self, T: int, ai2_variant: AI2_Variant, activation_scheme: Activation_Scheme
+        self,
+        T: int,
+        ai2_variant: AI2_Variant,
+        activation_scheme: Activation_Scheme,
+        hidden_sizes: tuple[int, ...] = (256, 128),
     ) -> None:
         super().__init__()
-        self.hidden1 = AutapticLayer(28 * 28, 256, T, ai2_variant, activation_scheme)
-        self.hidden2 = AutapticLayer(256, 128, T, ai2_variant, activation_scheme)
-        self.output = nn.Linear(128, 10)
+        layer_sizes = (28 * 28, *hidden_sizes)
+        self.hidden_layers = nn.ModuleList(
+            AutapticLayer(in_features, out_features, T, ai2_variant, activation_scheme)
+            for in_features, out_features in zip(layer_sizes, hidden_sizes)
+        )
+        self.output = nn.Linear(hidden_sizes[-1], 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.view(x.shape[0], -1)
-        x = self.hidden1(x)
-        x = self.hidden2(x)
+        for hidden_layer in self.hidden_layers:
+            x = hidden_layer(x)
         return self.output(x)
 
 
