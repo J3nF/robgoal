@@ -69,7 +69,7 @@ class AutapticLayer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y_activation = self._get_y_activation()
         y_self = x.new_zeros(x.shape[0], self.linear.out_features)
-        y = self._step(x, y_self, y_activation)  # Get uninhibited activation
+        y = self._step(x, y_self, y_activation)  # i.e., get uninhibited activation
         for _ in range(self.T - 1):
             y_self = self._get_y_self_activation(y)
             y = self._step(x, y_self, y_activation)
@@ -77,7 +77,6 @@ class AutapticLayer(nn.Module):
         return y
 
     def _get_y_activation(self) -> Callable[[torch.Tensor], torch.Tensor]:
-        """The main-path activation for `activation_scheme`, see the class docstring."""
         if self.activation_scheme == "sigmoid":
             y_activation = torch.sigmoid
         elif self.activation_scheme == "relu_sigmoid":
@@ -107,20 +106,16 @@ class AutapticLayer(nn.Module):
         y_self: torch.Tensor,
         y_activation: Callable[[torch.Tensor], torch.Tensor],
     ) -> torch.Tensor:
-        y = self._get_main_output(x, y_activation)
-        return self._get_inhibited_output(y, y_self)
-
-    def _get_main_output(
-        self, x: torch.Tensor, y_activation: Callable[[torch.Tensor], torch.Tensor]
-    ) -> torch.Tensor:
-        """The uninhibited, activated linear output for this unroll step."""
-        return y_activation(self.linear(x))
+        y = y_activation(self.linear(x))
+        y_tilde = self._get_inhibited_output(y, y_self)
+        return y_tilde
 
     def _get_inhibited_output(self, y: torch.Tensor, y_self: torch.Tensor) -> torch.Tensor:
         """Combines `y` with the inhibition signal `y_self` per `self.ai2_variant`."""
         if self.ai2_variant == "ai2_diff":
-            return y - y_self
+            y_tilde = y - y_self
         elif self.ai2_variant == "ai2_gate":
-            return y * (1 - y_self)
+            y_tilde = y * (1 - y_self)
         else:
             raise ValueError(f"Unknown ai2 variant {self.ai2_variant}")
+        return y_tilde
