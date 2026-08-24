@@ -84,6 +84,10 @@ def _get_run_by_name(name: str) -> Run:
     return matches[0]
 
 
+def _load_y_self_history(run_id: str, artifact_file: str) -> list[dict]:
+    return mlflow.artifacts.load_dict(f"runs:/{run_id}/{artifact_file}")["records"]
+
+
 @pytest.fixture(autouse=True)
 def _isolated_mlflow(tmp_path, monkeypatch):
     monkeypatch.setattr(logged_training, "TRACKING_URI", f"sqlite:///{tmp_path / 'test.db'}")
@@ -107,7 +111,7 @@ def test_run_and_log_logs_params_and_metrics() -> None:
     assert "final_backward_transfer" in run.data.metrics
 
 
-def test_y_self_magnitude_present_for_fcnn_absent_for_cnn() -> None:
+def test_y_self_absmean_present_for_fcnn_absent_for_cnn() -> None:
     stages = _make_stages(num_stages=1)
 
     fcnn_config = _make_config("test_fcnn_yself")
@@ -115,7 +119,7 @@ def test_y_self_magnitude_present_for_fcnn_absent_for_cnn() -> None:
         fcnn_config, sweep.build_model(fcnn_config), stages, torch.device("cpu")
     )
     fcnn_run = _get_run_by_name("test_fcnn_yself")
-    assert any(key.startswith("y_self_magnitude_") for key in fcnn_run.data.metrics)
+    assert any(key.startswith("y_self_absmean_") for key in fcnn_run.data.metrics)
 
     cnn_config = dataclasses.replace(
         fcnn_config,
@@ -128,7 +132,106 @@ def test_y_self_magnitude_present_for_fcnn_absent_for_cnn() -> None:
     )
     logged_training.run_and_log(cnn_config, CNN(), stages, torch.device("cpu"))
     cnn_run = _get_run_by_name("test_cnn_yself")
-    assert not any(key.startswith("y_self_magnitude_") for key in cnn_run.data.metrics)
+    assert not any(key.startswith("y_self_absmean_") for key in cnn_run.data.metrics)
+
+
+def test_y_self_history_flags_are_independent() -> None:
+    stages = _make_stages(num_stages=1)
+
+    epoch_only = dataclasses.replace(_make_config("test_epoch_only"), capture_y_self_per_epoch=True)
+    logged_training.run_and_log(
+        epoch_only, sweep.build_model(epoch_only), stages, torch.device("cpu")
+    )
+    run = _get_run_by_name("test_epoch_only")
+    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
+    assert len(epoch_history) > 0
+    with pytest.raises(mlflow.exceptions.MlflowException):
+        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_batch.json")
+
+    batch_only = dataclasses.replace(_make_config("test_batch_only"), capture_y_self_per_batch=True)
+    logged_training.run_and_log(
+        batch_only, sweep.build_model(batch_only), stages, torch.device("cpu")
+    )
+    run = _get_run_by_name("test_batch_only")
+    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
+    assert len(batch_history) > 0
+    with pytest.raises(mlflow.exceptions.MlflowException):
+        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_epoch.json")
+
+    neither = _make_config("test_neither")
+    logged_training.run_and_log(neither, sweep.build_model(neither), stages, torch.device("cpu"))
+    run = _get_run_by_name("test_neither")
+    with pytest.raises(mlflow.exceptions.MlflowException):
+        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_epoch.json")
+    with pytest.raises(mlflow.exceptions.MlflowException):
+        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_batch.json")
+
+
+def test_y_self_history_both_flags_produce_distinct_artifacts() -> None:
+    stages = _make_stages(num_stages=1)
+    config = dataclasses.replace(
+        _make_config("test_both"),
+        batch_size=4,
+        capture_y_self_per_epoch=True,
+        capture_y_self_per_batch=True,
+    )
+
+    logged_training.run_and_log(config, sweep.build_model(config), stages, torch.device("cpu"))
+
+    run = _get_run_by_name("test_both")
+    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
+    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
+    assert len(batch_history) > len(epoch_history)
+
+
+def test_y_self_history_accumulation_counts() -> None:
+    stages = _make_stages(num_stages=2)
+    epochs_per_stage = 2
+    config = dataclasses.replace(
+        _make_config("test_counts"),
+        epochs_per_stage=epochs_per_stage,
+        batch_size=4,
+        capture_y_self_per_epoch=True,
+        capture_y_self_per_batch=True,
+    )
+
+    logged_training.run_and_log(config, sweep.build_model(config), stages, torch.device("cpu"))
+
+    run = _get_run_by_name("test_counts")
+    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
+    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
+    # _FakeDataset has 10 examples/stage, batch_size=4 -> 3 batches/epoch.
+    assert len(epoch_history) == len(stages) * epochs_per_stage
+    assert len(batch_history) == len(stages) * epochs_per_stage * 3
+    assert [record["step"] for record in epoch_history] == list(range(len(epoch_history)))
+    assert [record["step"] for record in batch_history] == list(range(len(batch_history)))
+    # FCNN config (see _make_config): hidden_sizes=(4, 2) -> AutapticLayers
+    # "hidden_layers.0"/"hidden_layers.1" with 4/2 neurons each. Content
+    # checks catch a wiring bug that always logs {} regardless of model.
+    for record in (*epoch_history, *batch_history):
+        assert record["y_self"].keys() == {"hidden_layers.0", "hidden_layers.1"}
+        assert len(record["y_self"]["hidden_layers.0"]) == 4
+        assert len(record["y_self"]["hidden_layers.1"]) == 2
+
+
+def test_y_self_history_content_free_for_cnn() -> None:
+    stages = _make_stages(num_stages=1)
+    config = dataclasses.replace(
+        _make_config("test_cnn_history"),
+        model_kind="cnn",
+        ai2_variant=None,
+        activation_scheme=None,
+        T=None,
+        hidden_sizes=None,
+        capture_y_self_per_epoch=True,
+    )
+
+    logged_training.run_and_log(config, CNN(), stages, torch.device("cpu"))
+
+    run = _get_run_by_name("test_cnn_history")
+    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
+    assert len(epoch_history) > 0
+    assert all(record["y_self"] == {} for record in epoch_history)
 
 
 def test_replicate_group_rejects_fewer_than_two_seeds() -> None:

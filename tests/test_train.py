@@ -24,8 +24,8 @@ class _FakeDataset:
         return self.x[index], int(self.targets[index].item())
 
 
-def _make_stage(index: int) -> Stage:
-    dataset = _FakeDataset()
+def _make_stage(index: int, num_examples: int = 8) -> Stage:
+    dataset = _FakeDataset(num_examples)
     train_subset = Subset(
         cast(Dataset[tuple[torch.Tensor, int]], dataset), list(range(len(dataset)))
     )
@@ -72,6 +72,71 @@ def test_callbacks_are_optional() -> None:
 
     accuracy_by_stage = run_incremental_training(
         model, stages, device, epochs_per_stage=1, batch_size=4
+    )
+
+    assert len(accuracy_by_stage) == 1
+
+
+def test_on_batch_end_fires_correct_indices_across_varying_stage_sizes() -> None:
+    """Stage sizes differ (mirroring the real cumulative protocol, where later
+    stages have more training data) so each stage has a different batch
+    count per epoch -- a fixed-batches-per-epoch bug would surface here.
+    """
+    model = nn.Linear(4, 2)
+    stages = [_make_stage(0, num_examples=8), _make_stage(1, num_examples=16)]
+    device = torch.device("cpu")
+    epochs_per_stage = 2
+    batch_size = 4
+
+    batch_calls: list[tuple[int, int, int]] = []
+
+    run_incremental_training(
+        model,
+        stages,
+        device,
+        epochs_per_stage=epochs_per_stage,
+        batch_size=batch_size,
+        on_batch_end=lambda stage_index, epoch_index, batch_index: batch_calls.append(
+            (stage_index, epoch_index, batch_index)
+        ),
+    )
+
+    expected = [
+        (stage.index, epoch_index, batch_index)
+        for stage, num_examples in zip(stages, [8, 16])
+        for epoch_index in range(epochs_per_stage)
+        for batch_index in range(num_examples // batch_size)
+    ]
+    assert batch_calls == expected
+
+
+def test_on_batch_end_fires_for_partial_last_batch() -> None:
+    model = nn.Linear(4, 2)
+    stages = [_make_stage(0, num_examples=10)]
+    device = torch.device("cpu")
+
+    batch_calls: list[int] = []
+
+    run_incremental_training(
+        model,
+        stages,
+        device,
+        epochs_per_stage=1,
+        batch_size=4,
+        on_batch_end=lambda stage_index, epoch_index, batch_index: batch_calls.append(batch_index),
+    )
+
+    # 10 examples / batch_size 4 -> batches of 4, 4, 2 (partial last batch).
+    assert batch_calls == [0, 1, 2]
+
+
+def test_on_batch_end_is_optional() -> None:
+    model = nn.Linear(4, 2)
+    stages = [_make_stage(0)]
+    device = torch.device("cpu")
+
+    accuracy_by_stage = run_incremental_training(
+        model, stages, device, epochs_per_stage=1, batch_size=4, on_batch_end=None
     )
 
     assert len(accuracy_by_stage) == 1

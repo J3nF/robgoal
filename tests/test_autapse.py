@@ -56,7 +56,7 @@ def test_output_never_exceeds_raw_activation(
     discusses, and why `relu_sigmoid` exists.
     """
     layer = AutapticLayer(4, 3, T=5, ai2_variant=ai2_variant, activation_scheme=activation_scheme)
-    x = torch.randn(8, 4) * 10  # large magnitude to stress the gate
+    x = torch.randn(8, 4) * 10  # large input to stress the gate
     y = layer(x)
     activation = torch.sigmoid if activation_scheme == "sigmoid" else torch.relu
     y_raw = activation(layer.linear(x))
