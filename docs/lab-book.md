@@ -159,6 +159,10 @@ We suspect Adam's momentum and adaptive learning to cover up the slightly change
 
 In order to make sure ai2 is able to meaningfully change the loss landscape, we choose SGD explicitly because of its sensitivity to local loss.
 
+### Logging: MLflow
+
+As the heading says, I use [MLflow's PyTorch integration](https://mlflow.org/docs/latest/ml/deep-learning/pytorch/) to log and, ideally, live-view run results.
+
 ## Implemented tests
 
 3 controls (no self-inhibition) + 2 formula variants × 2 activation schemes.
