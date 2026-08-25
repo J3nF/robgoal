@@ -191,3 +191,20 @@ TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight nor
 | 7 | FCNN_AI2 + `ai2_gate` | relu_sigmoid| `y(t) = relu(y_raw(t)) * (1 - tanh(y(t-1)/2))` |
 
 On top of these 7, `run_experiments.py` runs 7 more: a one-factor-at-a-time sweep over `T` (`{2,5,8}`), `epochs_per_stage` (`{2,10}`), and `hidden_sizes` (`{(64,32),(512,256)}`), off test 6 as the anchor -- see "Logging: MLflow" above for why one-factor-at-a-time over a full grid, and its caveats.
+
+## ToDos 2026-08-26 or so
+
+### Present Conditions
+
+- Compare 5 random Random Seeds results for each run!
+- For now, do not use sigmoid variants, since they seem to die off.
+- We think/hope our network can deal better with difficult/restricted conditions (small network sizes, few epochs, etc.).\n
+ => Implement experiments with such conditions.
+- TODO: Implement activity recording, not only y_self recording.
+
+### Focused experiments
+
+- [ ] Compare networks of increasingly smaller size;
+- [ ] Make networks learn one (of, e.g., three representationally different) numbers at a time (instead of 0-4, 5, 6,...).
+- [ ] Try out different learning rates.
+  - H: Higher lr prevents convergence?
