@@ -204,7 +204,11 @@ On top of these 7, `run_experiments.py` runs 7 more: a one-factor-at-a-time swee
 
 ### Focused experiments
 
-- [ ] Compare networks of increasingly smaller size;
-- [ ] Make networks learn one (of, e.g., three representationally different) numbers at a time (instead of 0-4, 5, 6,...).
-- [ ] Try out different learning rates.
+For all the following, use 5 randomly chosen random seeds.
+
+- [ ] Compare networks of increasingly smaller...
+  - [ ] size (100, 75, 50, 25) and...
+  - [ ] epoch size (10, 5, 2);
+- [ ] Make networks learn one (of, e.g., three representationally different) number(s) at a time (instead of 0-4, 5, 6,...).
+- [ ] Try out different learning rates (1e-(2,3,4)).
   - H: Higher lr prevents convergence?
