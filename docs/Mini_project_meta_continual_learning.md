@@ -11,7 +11,7 @@
   - As the Bio people scream right now, we wish to use *autapses*.
 - By "self-inhibiting" neural outputs via autapses, we hope for no single neuron or layer to be solely responsible for critical features.
 - I.e.: Many neurons share important information.
-- Hypothesis: This diffuses information across the network, which tackles local information overloading. Voila.
+- Hypothesis: This diffuses information across the network, which tackles local information overloading. Voilà.
 
 ## Meeting notes
 
@@ -19,12 +19,12 @@
 
 - Immediate task: Literature / field review (see Zothero)
 
-<https://avalanche.continualai.org/> - Standard framework for CL.
+<https://avalanche.continualai.org/> -- Standard framework for CL.
 
-Take a look at the new folder "Theoretical works" and on the paper
+Have a look at the new folder "Theoretical works" and on the paper
 "When Meta-Learning Meets Online and Continual Learning: A Survey" under Meta Learning + Continual Learning.
 
-I was reading a paper that is under review for NeurIPS and their idea on meta incremental learning is quite interesting. I've create a new latex in our overleaf under "meta_incremental_learning", take a look and let me know what do you think.
+I was reading a paper that is under review for NeurIPS and their idea on meta incremental learning is quite interesting. I've created a new latex in our overleaf under "meta_incremental_learning", have a look and let me know what do you think.
 
 ### 2026-06-26
 
@@ -67,19 +67,19 @@ The coming week is going to include implementation!
 
 ##### Activity-dependent local plasticity
 
-- Connor: Methabolic rate depends on neuron's activity and can be exhausted.
+- Connor: Metabolic rate depends on neuron's activity and can be exhausted.
 - Jens: Implement inhibition as self-recurrent connection of neuron.
 - Both would force a network to spread information, instead of just using single neurons/pathways.
 - Right now, focus on inhibition-like mechanism.
 - Questions re: implementation details:
-  - Inhibit single neurons vs. network parts ( layer level / channel level)?
+  - Inhibit single neurons vs. network parts (layer level / channel level)?
     - If network parts: What level of granularity?
   - Shape of inhibition?
-    - Decaying vs RELU vs ...
-    - Note: If implemented as self-recurrent connection, time scale is 1 step if using binary inhibition.
+    - Decaying vs ReLU vs ...
+    - Note: If implemented as self-recurrent connection, timescale is 1 step if using binary inhibition.
       - This explicitly separates this approach from simple masking.
   - Think about how the inhibition weight would be included in the update mechanism.
-  - If not going for single neurons: How to categorise channels / pathways as such?
+  - If not going for single neurons: How to categorize channels / pathways as such?
 
 ### 2026-07-06
 
@@ -97,11 +97,11 @@ The coming week is going to include implementation!
 
 - Go for the self-recurrent network as of now.
 - Use MNIST data for now.
-- Start with 5 digits, see how the network generalises afterwards.
+- Start with 5 digits, see how the network generalizes afterwards.
   - Q: Add one by one or the whole held-back set?
   - A: One by one enables clearer results with regard to "novelty" of new data.
-- re: Network size
-  - If using a size close to capacity exhaustion, we hopt to see more stable learning and less overfitting with our approach.
+- Re: Network size
+  - If using a size close to capacity exhaustion, we hope to see more stable learning and less overfitting with our approach.
   - If using huge networks, we would hope to see more network parts being active as we want to diffuse information.
 - Which network to use?
   - MLP (as non-convolutional one) (one small, one large)
@@ -115,9 +115,9 @@ The coming week is going to include implementation!
 - Planning fallacies:
   - I spent more hours than reasonable on trying to download MNIST data for PyTorch.
   - On a different note, I had a fight with Isambard, who, for all practical purposes, has mostly been in a leaky-comatose state.
-- Some barebones entropy considerations took place. Basic argument:
-  - Assuming neurons have finite """precision""" $p(x|y\neq x) \neq 0$, firing rates 0 and 1 waste information.
-  - Our artificial """inhibition""" push neurons away from $p\in \{0,1\}$.
+- Some bare-bones entropy considerations took place. Basic argument:
+  - Assuming neurons have finite "precision" $p(x|y\neq x) \neq 0$, firing rates 0 and 1 waste information.
+  - Our artificial "inhibition" push neurons away from $p\in \{0,1\}$.
 
 #### Notes 04
 
@@ -129,10 +129,10 @@ The coming week is going to include implementation!
             1. fail more gracefully.
   - Information theory-inspired:
     - Sparse representations imply firing rates of 0 and 1.
-    - Pushing neurons away from 0 and 1 *motivates*^[formally, a network may still reach sparse representations with autapsic inhibition] networks to store information in a distributed manner (yay).
-    - Implementation via ***Autapsic Inhibition***™ -- neurons inhibiting their own activation more, the more active they are -- hinders neurons from being perfect sparse perceptrons.
+    - Pushing neurons away from 0 and 1 *motivates*^[formally, a network may still reach sparse representations with autaptic inhibition] networks to store information in a distributed manner (yay).
+    - Implementation via ***Autaptic Inhibition***™ -- neurons inhibiting their own activation more, the more active they are -- hinders neurons from being perfect sparse perceptrons.
     - => ***Single neurons' job is not to learn by themselves^[thereby making the network depending on them]; learning representations is the networks job.***
-  - Note the line of argument is not ad-hoc, but motivated by the autapses idea. There is some overlap, but no perfect isomorphism.
+  - Note the line of argument is not ad-hoc, but motivated by the autapse idea. There is some overlap, but no perfect isomorphism.
 
 ### 2026-07-28
 
@@ -140,27 +140,27 @@ The coming week is going to include implementation!
 
 ##### Summer School
 
-- Main point: People were broadly interested in our research idea (though not they were not domain experts).
+- Main point: People were broadly interested in our research idea (though they were not domain experts).
 - Got in touch with potentially interesting future contacts (specially in Computational Neuroscience, Information Theory).
 
 ##### Current Plan
 
 - Notation:
-  - Most importantly, fancy project name: *autapses-inhibited AI (ai2)*.
+  - Most importantly, fancy project name: *Autaptic Inhibition in Artificial Intelligence (ai2)*.
   - $i =$ neuron of concern;
-  - $\tilde\bullet =$ autapses-related parameter;
+  - $\tilde\bullet =$ autapsis-related parameter;
   - $y_i =$ $i$'s unadapted output;
   - $b_i =$ $i$'s bias.
 - Have run MNIST experiments for
   - CNN
   - Fully connected NN
-  - 3 autapsic FCNN_AI2 implementation.
+  - 3 autaptic FCNN_AI2 implementation.
       $$\begin{align}
         \tilde b_i(t) &= b_i(t) - b_i(t-1)\\
         \tilde y_i(t) &= y_i(t) - y_i(t-1)\\
         \tilde y_i(t) &= y_i(t)\cdot\left(1-y_i(t-1)\right)\\
       \end{align}$$
-      with learning taking place between each timestep $t, (t-1)$.
+      with learning taking place between each time step $t, (t-1)$.
   - (Future control group: Randomly switching subsets of neurons off.)
   - Learn subsets of all numbers, adding more and more after having learnt old set.
   - Note: "*Having learnt*" is epoch-delimited instead of cost-function delimited.
@@ -171,4 +171,4 @@ The coming week is going to include implementation!
 
 #### Notes 06
 
-- Prompt to think about including local information / backprop change in future inhibition algorithm.
+- Prompt to think about including local information / SGD change in future inhibition algorithm.
