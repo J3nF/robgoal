@@ -1,10 +1,17 @@
-% Only 2 citations verified via web search so far (2026-08-31) -- both are
+% 6 citations verified via web search so far (2026-08-31). The first 2 are
 % directly named in docs/Mini_project_meta_continual_learning.md's meeting
-% notes (2026-06-19). More citations (autapse biology, catastrophic
-% forgetting origin, model-agnostic baselines) are TODO -- see
-% typst/main.typ's Related Work section and the report to-do list. Do not
-% add entries here without verifying them (title, authors, venue) first --
-% no citation should be added from memory alone.
+% notes (2026-06-19). The remaining 4 come from ref/self_recurrent_neurons.bib
+% -- selected out of that file's 6 candidates as the best-fitting/most
+% important ones, each red-team-verified (bibliographic details + that our
+% report's characterization of the paper's content is accurate) before
+% inclusion; see typst/main.typ's Introduction and Related Work sections.
+% wang2015autaptic and yilmaz2016autapse (biophysical autaptic-dynamics
+% modeling, not directly relevant to this report's one-sentence biology
+% grounding) were skimmed but deliberately left out to stay within the
+% Related Work section's page budget -- still available in
+% ref/self_recurrent_neurons.bib if needed later.
+% Do not add entries here without verifying them (title, authors, venue)
+% first -- no citation should be added from memory alone.
 
 @article{Carta2023Avalanche,
   author = {Carta, Antonio and Pellegrini, Lorenzo and Cossu, Andrea and Hemati, Hamed and Lomonaco, Vincenzo},
@@ -23,4 +30,87 @@
   journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
   year = {2024},
   doi = {10.1109/TPAMI.2024.3463709}
+}
+
+@article{vanderloos1972autapses,
+  author  = {Van der Loos, H. and Glaser, E. M.},
+  title   = {Autapses in neocortex cerebri: synapses between a pyramidal
+             cell's axon and its own dendrites},
+  journal = {Brain Research},
+  volume  = {48},
+  pages   = {355--360},
+  year    = {1972},
+  doi     = {10.1016/0006-8993(72)90189-8}
+}
+
+@inproceedings{li2018indrnn,
+  author    = {Li, Shuai and Li, Wanqing and Cook, Chris and Zhu, Ce and Gao, Yanbo},
+  title     = {Independently Recurrent Neural Network (IndRNN): Building a
+               Longer and Deeper RNN},
+  booktitle = {Proceedings of the IEEE Conference on Computer Vision and
+               Pattern Recognition (CVPR)},
+  month     = {June},
+  year      = {2018},
+  pages     = {5457--5466},
+  doi       = {10.1109/CVPR.2018.00572}
+}
+
+@article{zhang2019ernn,
+  author  = {Zhang, Ziming and Kag, Anil and Sullivan, Alan and Saligrama, Venkatesh},
+  title   = {Equilibrated Recurrent Neural Network: Neuronal Time-Delayed
+             Self-Feedback Improves Accuracy and Stability},
+  journal = {arXiv preprint arXiv:1903.00755},
+  year    = {2019},
+  eprint  = {1903.00755},
+  archivePrefix = {arXiv}
+}
+
+@article{zhang2021scsrsnn,
+  author  = {Zhang, Wenrui and Li, Peng},
+  title   = {Skip-Connected Self-Recurrent Spiking Neural Networks with
+             Joint Intrinsic Parameter and Synaptic Weight Training},
+  journal = {Neural Computation},
+  volume  = {33},
+  number  = {7},
+  pages   = {1886--1913},
+  year    = {2021},
+  doi     = {10.1162/neco_a_01393}
+}
+
+@article{barron2021inhibition,
+  author  = {Barron, Helen C.},
+  title   = {Neural inhibition for continual learning and memory},
+  journal = {Current Opinion in Neurobiology},
+  volume  = {67},
+  pages   = {85--94},
+  year    = {2021},
+  doi     = {10.1016/j.conb.2020.09.007}
+}
+
+@inproceedings{zhang2021lisr,
+  author    = {Zhang, Wenrui and Li, Peng},
+  title     = {Spiking Neural Networks with Laterally-Inhibited Self-Recurrent Units},
+  booktitle = {2021 International Joint Conference on Neural Networks (IJCNN)},
+  address   = {Shenzhen, China},
+  pages     = {1--8},
+  year      = {2021},
+  doi       = {10.1109/IJCNN52387.2021.9533726}
+}
+
+@article{kim2021neuronimportance,
+  author  = {Kim, Sohee and Lee, Seungkyu},
+  title   = {Continual Learning with Neuron Activation Importance},
+  journal = {arXiv preprint arXiv:2107.12657},
+  year    = {2021},
+  eprint  = {2107.12657},
+  archivePrefix = {arXiv}
+}
+
+@article{javed2019oml,
+  author  = {Javed, Khurram and White, Martha},
+  title   = {Meta-Learning Representations for Continual Learning},
+  journal = {arXiv preprint arXiv:1905.12588},
+  year    = {2019},
+  eprint  = {1905.12588},
+  archivePrefix = {arXiv}
 }

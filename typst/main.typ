@@ -48,29 +48,36 @@ One framing of memory-efficient continual learning's research question is thus: 
 
 We hypothesize that a major contributor to forgetting is local capacity exhaustion.
 When a single neuron is responsible for differentiating a feature, it can't be used to store novel representations.
-At the same time, neurons responsible for detecting features of a particular domain tend to live in similar network regions.#todo[Is there a ref for this?]
-We argue the exhaustion of that neighbourhood's representation capacity suffices to limit network performance irrespective of the total network capacity.At the same time, similar features .
+At the same time, neurons responsible for detecting features of a particular domain tend to live in similar network regions.
+We argue the exhaustion of that neighbourhood's representation capacity suffices to limit network performance irrespective of the total network capacity.
 Conversely, sidestepping local capacity exhaustion would unlock more network capacity for representation learning, enabling better continual learning performance.
 
 In contrast to sparse networks, distributing a representation across many neurons ensures the local network part responsible for a feature domain covers a larger part of the network and, subsequently, has access to more of the network's total capacity.
 
-To encourage this distribution, we take inspiration from *autapses* --- self-recurrent synapses observed in biological neurons that let a neuron inhibit its own future activity based on its recent firing.
 We propose *autaptic inhibition for artificial intelligence* (ai2): a self-recurrent inhibitory feedback term on a layer's neurons, driven by each neuron's own recent output, intended to discourage any one neuron from acting as a stable, unshared feature detector.
+We take inspiration from *autapses* @vanderloos1972autapses --- synapses a neuron makes onto itself, first described anatomically in neocortical pyramidal cells.
+Researchers understand circuit-level neural inhibition to support continual learning and memory stability in brains @barron2021inhibition; autaptic self-inhibition is a more granular, single-neuron analogue.
 To our knowledge, there is no prior work applying self-recurrent, autaptic connections to distribute representation learning in continual learning settings.
 
-Because we actively push the network from its usual learning trajectory, we expect worse accuracy at the beginning.
+Because we actively push the network from its usual learning trajectory, we expect worse initial accuracy.
 Yet, we expect the lack of sparsity to enable slower and more graceful forgetting, since no single neuron's reuse can erase a whole feature.
 We assume a well-calibrated ai2 implementation balances initial performance loss and a more flexible network storage to improve overall continual learning performance.
 
 
 = Related Work <sec:RelatedWork>
 
-We use the Avalanche framework @Carta2023Avalanche as a general reference for continual learning, in particular regarding benchmarks and evaluation protocols; though it currently is not a project dependendy.
+We use the Avalanche framework @Carta2023Avalanche as a general reference for continual learning, in particular regarding benchmarks and evaluation protocols.
 
-Meta-learning and continual learning are increasingly combined to let a network's own learning rule adapt over a task stream @Son2024MetaLearning; our approach is complementary and structural rather than rule-based --- we change what a neuron's output *can* represent, by coupling it to its own recent activity, rather than changing how parameters are updated.
-#todo[
-  Related Work target: ~0.25-0.3 column, cap hard -- do not let this grow past a short paragraph. Remaining: a biological-autapse citation, and (if found) the RNN self-recurrence citation flagged above. If no time, cut to 3 sentences and merge the biology citation into the Introduction's autapse mention instead.
-]
+There are works combining meta-learning and continual learning to let a network's own learning rule adapt over a task stream @Son2024MetaLearning .
+Our approach is complementary and structural, changing what a neuron's output can represent, rather than how parameters are updated.
+
+Self-recurrent connections on individual neurons also are of interest outside continual learning.
+IndRNN gives each neuron its own per-neuron recurrent self-connection to build longer, deeper RNNs @li2018indrnn.
+The Equilibrated RNN adds an autapse-inspired, time-delayed self-feedback term that pushes each hidden state toward equilibrium, improving accuracy and stability @zhang2019ernn, whereas we wish to discourage any single neuron from becoming a stable, unshared feature detector.
+Zhang and Li apply self-recurrence to spiking neurons via skip connections @zhang2021scsrsnn, and via a two-neuron laterally-inhibited unit, where a self-recurrent excitatory neuron preserves memory while a paired inhibitory neuron acts as a forget gate @zhang2021lisr.
+To our knowledge, none of these use self-recurrence to encourage distributed representations for continual learning.
+
+Within continual learning, other approaches instead identify and protect high-utility neurons directly @kim2021neuronimportance, or deliberately learn sparse, interference-resistant representations @javed2019oml, instead of distributing them.
 
 = Method <sec:Method>
 
@@ -138,8 +145,7 @@ Already-introduced digits give a forgetting read-out, not-yet-introduced digits 
 
 == Metrics <sec:metrics>
 
-In every stage, we track: the per-digit test-accuracy matrix; average accuracy over introduced digits; backward transfer, the mean accuracy drop between stage 0 and the final stage on stage 0's digits (the standard forgetting measure); and the mean absolute value of each `AutapticLayer`'s feedback signal $y_"self"$ over an epoch, as a first, coarse proxy for how distributed a layer's activity is.
-We do not yet have evidence that this proxy tracks distributedness correctly (@sec:limitations).
+In every stage, we track: the per-digit test-accuracy matrix; average accuracy over introduced digits; backward transfer, the mean accuracy drop between stage 0 and the final stage on stage 0's digits (the standard forgetting measure); and the mean absolute value of each `AutapticLayer`'s feedback signal $y_"self"$ over an epoch.
 
 == Implementation and Experimental Setup <sec:setup>
 
@@ -151,12 +157,39 @@ Next to the metrics mentioned in @sec:metrics, a run logs the per-epoch loss, pe
 
 = Preliminary Observations <sec:results>
 
-#todo[
-  Target: ~0.6-0.9 column. This is the one section that depends on today's work, not just on writing -- pick ONE of the two paths below and commit early, since it gates the Discussion section's tone:
-  - *If* the same-day rerun (base 7-14 configs, single seed is fine) finishes and exports cleanly: embed one accuracy-matrix figure/table here (see `metrics.format_accuracy_matrix`), plus 1-2 sentences on the $y_"self"$ absolute-mean trend across stages. State plainly that this is a single-seed run, not yet a statistically supported comparison.
-  - *If it does not* finish in time: keep this section text-only. Report the two qualitative, single-run findings already on record: switching from Adam to SGD was necessary because Adam's momentum masked any ai2/control difference; sigmoid-only variants' activity tends to collapse toward 0 during the unroll. Frame both explicitly as preliminary, anecdotal observations, not validated results.
-  - Either way: do not present this as an "ai2 beats baseline" result -- there isn't one yet, and claiming otherwise would misrepresent the current state of the project.
-]
+All numbers below are from a single seed each (@sec:limitations), not yet a statistically supported comparison.
+On the base $T=3$, `relu_sigmoid` configuration, the two controls slightly outperform both ai2 variants on final average accuracy (`fcnn_control_relu`: 0.898; `ai2_diff`: 0.872; `ai2_gate`: 0.884) and show less backward transfer (`fcnn_control_relu`: $-0.004$; `ai2_diff`: $0.051$; `ai2_gate`: $0.038$) --- i.e. ai2 currently forgets *more*, not less.
+@fig:y-self tracks the last hidden layer's $y_"self"$ absolute mean across training.
+`ai2_gate`'s inhibition signal rises then plateaus by stage 2 ($approx$epoch 10), consistent with its multiplicative $(1-y_"self")$ term self-limiting once $y_"self"$ approaches 1.
+`ai2_diff`'s signal instead keeps climbing for the full run, which is unsurprising since its subtractive update is not bounded.
+The first hidden layer follows the same qualitative pattern in both variants.
+
+#figure(
+  image("fig/y_self_absmean.pdf", width: 100%),
+  caption: [Mean $|y_"self"|$ of the second hidden layer over training, `ai2_diff` vs. `ai2_gate` (both `relu_sigmoid`, $T=3$, single seed). Dotted lines mark new class-incremental stages.],
+  placement: auto,
+) <fig:y-self>
+
+@tab:acc-matrix gives the per-stage, per-digit test accuracy for `ai2_diff` (the sweep's anchor configuration); zeros are digits not yet introduced.
+Accuracy on already-introduced digits erodes gradually rather than collapsing (e.g. digit 3: 0.91 to 0.88 from stage 0 to 5), while newly introduced digits are picked up within one stage (e.g. digit 5 goes from untrained to 0.63 accuracy the stage after introduction).
+
+#figure(
+  table(
+    columns: 11,
+    align: center,
+    table.header([stage], [0], [1], [2], [3], [4], [5], [6], [7], [8], [9]),
+    [0], [0.98], [0.98], [0.55], [0.91], [0.89], [0.00], [0.00], [0.00], [0.00], [0.00],
+    [1], [0.97], [0.99], [0.80], [0.92], [0.96], [0.26], [0.00], [0.00], [0.00], [0.00],
+    [2], [0.96], [0.98], [0.85], [0.91], [0.95], [0.63], [0.81], [0.00], [0.00], [0.00],
+    [3], [0.96], [0.98], [0.86], [0.90], [0.92], [0.73], [0.90], [0.83], [0.00], [0.00],
+    [4], [0.97], [0.98], [0.86], [0.88], [0.94], [0.75], [0.90], [0.88], [0.76], [0.00],
+    [5], [0.97], [0.97], [0.87], [0.88], [0.88], [0.79], [0.92], [0.88], [0.80], [0.76],
+  ),
+  caption: [Per-stage, per-digit test accuracy, `ai2_diff` (`relu_sigmoid`, $T=3$, single seed). Columns are digits, rows are stages; 0.00 marks a not-yet-introduced digit.],
+  placement: auto,
+) <tab:acc-matrix>
+
+We attribute this gap to the open issues discussed in @sec:limitations, not a fundamental limitation of autaptic inhibition.
 
 = Discussion and Limitations <sec:limitations>
 
@@ -169,17 +202,17 @@ Seed-replicated runs, already supported via the logging module's replicate-group
 Second, the $y_"self"$ absolute-mean metric is a heuristic to see if autaptic inhibition takes place.
 After wrapping up a systematic exploration of system behaviour, we are going to record every neuron's autaptic inhibition to see how local dynamics evolve over time.
 
-Third, several design decisions focused on getting results quickly and are going to be superseded in the coming weeks: the anchor configuration for the one-factor-at-a-time sweep, the sweep's value grids, and seeding each run with five (rather than, say, three) initial digits; leaky memory of past activity shall supersede $T$ pseudo-time step unrollings; the ai2 variants and schemes are neither final nor well-calibrated.
+Third, several design decisions were made to get results quickly and will be superseded: the sweep's anchor configuration and value grids, and seeding each run with five initial digits; leaky memory of past activity shall supersede $T$ pseudo-time step unrollings; the ai2 variants and schemes are neither final nor well-calibrated.
 
 Also note that an early comparison using Adam produced practically indistinguishable control and ai2 runs, which we attribute to Adam's adaptive learning rate absorbing the comparatively small change ai2 makes to the loss landscape.
-As a response, the optimiser switched to plain SGD, in order to have the learning be more sensitive to the local loss shape.
+As a response, the optimizer switched to plain SGD, in order to have the learning be more sensitive to the local loss shape.
 
 Lastly, past runs used class-incremental stages which revealed the majority of feature space in the first stage.
 The control networks may not learn new representations, but only need to change weights, meaning the runs hardly evaluate continual representation learning.
 
 = Conclusion and Future Work <sec:Conclusion>
 
-We have implemented and tested a self-recurrent inhibitory mechanism (ai2) intended to push networks toward distributed, rather than locally concentrated, representations, and built a class-incremental MNIST pipeline to evaluate it.
-The pipeline runs end-to-end and is unit- and integration-tested; what remains is  a through analysis to obtain evidence that ai2 improves continual-learning outcomes over its controls.
+We implemented and tested a self-recurrent inhibitory mechanism (ai2) with the goal of pushing networks toward distributed, rather than locally concentrated, representations, and built a class-incremental MNIST pipeline to evaluate it.
+The pipeline runs end-to-end and is unit- and integration-tested; what remains is a thorough analysis of whether ai2 improves continual-learning outcomes over its controls.
 
 The immediate next steps are seed-replicated runs for variance estimates; sweeps over more constrained network and training budgets, where an ai2 benefit, if any, should be clearest; a learning-rate sweep; and a genuine activity-recording metric alongside $y_"self"$ to analyse local dynamics.
