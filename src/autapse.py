@@ -1,4 +1,4 @@
-"""Autapsic self-inhibition layer.
+"""Autaptic self-inhibition layer.
 
 Implementing two activation schemes and two inhibition variants.
 See `lab-book.md` for more details.

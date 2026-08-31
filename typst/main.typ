@@ -11,7 +11,7 @@
     How can one design a performant, memory-efficient continual learning framework that operates within a network's fixed capacity?
     We hypothesize that local capacity constraints limit long-term learning performance in sparse networks, and how distributing learning schemes could circumvent this problem. 
     Inspired by biological networks (TODO: nec. start of sentence?)), we then propose autaptic inhibition for artificial intelligence (ai2) as a mechanism to motivate networks to distribute representations across many neurons.
-    Such ai2 systems would outperform their conventionally sparse counterparts by balancing knowledge retainment and information redistribution flexibly.
+    Such ai2 systems would outperform their conventionally sparse counterparts by balancing knowledge retaining and information redistribution flexibly.
   ],
   authors: (
     (
