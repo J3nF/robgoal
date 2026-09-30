@@ -619,3 +619,8 @@ results/*
 # cwd-relative ("./mlruns"), only avoided because logged_training.py sets it
 # explicitly -- ignore it too in case that ever silently stops applying.
 /mlruns/
+
+# Personal additions
+CODING_STYLE.md
+CLAUDE.md
+WRITING_STYLE.md

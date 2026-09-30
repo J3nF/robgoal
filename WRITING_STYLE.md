@@ -1,7 +1,8 @@
 # Writing Style Guide
 
-For prose in Markdown notes/docs (lab books, design notes, project-plan docs).
-Not code — see `STYLE.md` for that. Rules, not prose.
+For prose in Markdown notes/docs (lab books, design notes, project-plan docs) —
+not for conversational replies to the user, which follow separate guidance.
+Not code — see `CODING_STYLE.md` for that. Rules, not prose.
 
 ## Voice
 
