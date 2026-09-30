@@ -2,23 +2,34 @@
 
 ## Data protocol
 
-Class-incremental MNIST, cumulative (`data.py`):
+Class-incremental MNIST or FashionMNIST, cumulative (`data.py`):
 
-- Stage 0: digits {0–4}
-- Stages 1–5: add digit 5, 6, 7, 8, 9 one at a time; train set is the union of all
-  digits introduced so far (not replaced) — per 07-06 notes ("one by one enables
-  clearer results with regard to novelty").
+- `get_mnist_data(root, dataset="mnist")`: `dataset` selects `"mnist"`
+  (default) or `"fashion_mnist"` via the `_DATASETS` lookup (torchvision
+  class + that dataset's own normalization mean/std) — everything downstream
+  (models, training, metrics) is dataset-agnostic (both are 10-class,
+  1x28x28), so this is the only place the choice needs to be made.
+- Stage 0: an initial set of classes; stages 1..N: add the rest,
+  `classes_per_stage` at a time (default: 5 initial, then 1 at a time,
+  i.e. digits {0–4} then 5, 6, 7, 8, 9) — train set is the union of all
+  classes introduced so far (not replaced) — per 07-06 notes ("one by one enables
+  clearer results with regard to novelty"). `build_stage_digits(num_classes,
+  initial_classes, classes_per_stage)` generalizes this split; its default
+  output is `STAGE_DIGITS`. The remaining classes don't need to divide
+  evenly by `classes_per_stage` — the last stage just takes whatever's left,
+  so every class is always introduced exactly once.
 - Fixed `epochs_per_stage` epochs per stage — "learnt" is epoch-delimited, not
   loss-delimited (07-14 pre-notes: cost-function conditions may over-restrict
   the loss landscape).
-- Eval each stage on the full test set (all 10 digits); the resulting per-digit
+- Eval each stage on the full test set (all 10 classes); the resulting per-digit
   accuracy dict is sliced downstream into a forgetting read-out (already-introduced
   digits) and a generalization read-out (not-yet-introduced ones) — the
   "generalization" check from 07-06.
 
-`build_stages` accumulates `digits_seen` across the loop and delegates each
-stage's actual construction to `_build_stage(stage_idx, digits_seen,
-train_data, test_data)`.
+`build_stages(train_data, test_data, stage_digits=None)` accumulates
+`digits_seen` across the loop and delegates each stage's actual construction
+to `_build_stage(stage_idx, digits_seen, train_data, test_data)`; `None` (the
+sweep's default) uses `STAGE_DIGITS`, else the given split.
 
 ## Core module: `autapse.py`
 
@@ -49,6 +60,9 @@ read — a plain tensor attribute, not a parameter/buffer, so it's invisible to
   length, the depth) of the hidden stack. `T=1` gives the FCNN controls
   (tests 2–3 in lab-book.md's "Implemented tests").
 - `CNN`: control architecture, 2×(conv+ReLU+pool) + FC, no self-inhibition.
+  `channels: tuple[int, int] = (16, 32)` sets conv1/conv2's output channel
+  counts — the CNN control's equivalent of `FCNN_AI2`'s `hidden_sizes` for
+  the shrinking-network scan (see `size_scan.py` below).
 
 ## Training loop: `train.py`
 
@@ -71,13 +85,14 @@ read — a plain tensor attribute, not a parameter/buffer, so it's invisible to
 `name`, `sweep_axis` (tag, not a logged param — which dimension this config
 varies relative to its sweep's anchor), `model_kind: Literal["cnn", "fcnn"]`
 (explicit discriminator `sweep.build_model` switches on, not inferred from
-`ai2_variant is None`), `epochs_per_stage`, `seed`, `lr`, `batch_size`, plus
-the FCNN-only `ai2_variant`, `activation_scheme`, `T`, `hidden_sizes` (all
-`None` for `model_kind="cnn"`). Lives in its own module — both `sweep.py`
-(to build configs) and `logged_training.py` (to type `run_and_log`'s
-parameter) need the type, and `run_experiments.py` also imports
-`logged_training`; putting `RunConfig` in either of those two would create a
-circular import.
+`ai2_variant is None`), `dataset` (`"mnist"`/`"fashion_mnist"`, see
+`data.get_mnist_data`), `epochs_per_stage`, `seed`, `lr`, `batch_size`, plus
+the FCNN-only `ai2_variant`, `activation_scheme`, `T`, `hidden_sizes`, and the
+CNN-only `channels` (all `None` for the other `model_kind`). Lives in its own
+module — both `sweep.py` (to build configs) and `logged_training.py` (to type
+`run_and_log`'s parameter) need the type, and `run_experiments.py` also
+imports `logged_training`; putting `RunConfig` in either of those two would
+create a circular import.
 
 ## Dynamics: `dynamics_insights.py`
 
@@ -131,50 +146,97 @@ imports this module, not the other way around.
     exact config (documented on `_build_T_sweep`, not `build_configs`, since
     it's specific to that one sweep). See lab-book.md, "Logging: MLflow",
     for why one-factor-at-a-time over a full 144-combo grid.
-- `build_model(config: RunConfig) -> nn.Module`: `CNN()` for
-  `model_kind="cnn"`; else asserts the four FCNN-only fields are set (fail
-  fast on a malformed config — `build_configs` always sets all four
-  together, so this guards against a `RunConfig` built some other way, not
-  an expected input) and builds `FCNN_AI2`.
+- `build_model(config: RunConfig) -> nn.Module`: `CNN(channels=config.channels)`
+  (or `CNN()` if `channels` is unset) for `model_kind="cnn"`; else asserts
+  the four FCNN-only fields are set (fail fast on a malformed config —
+  `build_configs` always sets all four together, so this guards against a
+  `RunConfig` built some other way, not an expected input) and builds
+  `FCNN_AI2`.
+
+## Shrinking-network scan: `size_scan.py`
+
+Same pure config/model-factory shape as `sweep.py`, sibling module (not a
+`sweep.py` function) so `sweep.build_configs()`'s own base tests stay exactly
+what they were. See lab-book.md, "ToDos 2026-08-26 or so".
+
+- `FCNN_HIDDEN_SIZES_SCAN`/`CNN_CHANNELS_SCAN`: 5 progressively smaller
+  width/channel-count steps for the FCNN and CNN families respectively (same
+  length, validated in `build_size_scan_configs`; not meant to match in
+  absolute numbers — `CNN`'s default `(16, 32)` is already narrow relative
+  to `FCNN_AI2`'s default `(256, 128)`).
+- `build_size_scan_configs(hidden_sizes_scan, channels_scan) -> list[RunConfig]`:
+  per step, emits the CNN control at that step's channels, the 2 FCNN
+  controls (`T=1`) at that step's hidden_sizes, and the `ai2_variant` x
+  `activation_scheme` grid (`T=sweep.BASE_T`) at that step's hidden_sizes —
+  i.e. every family in `sweep.build_configs()`'s base tests, just shrinking.
+  Names are prefixed `sizescan_step{i}_` so they can never collide with
+  `sweep.build_configs()`'s own names (both write to the same flat
+  `results/{name}.json` namespace and MLflow's run-name-based comparison —
+  see `test_sweep.py`'s own unique-names test for why that collision matters).
 
 ## Experiment runner: `run_experiments.py`
 
 Orchestration/IO only: seeding, training, MLflow logging, result reporting —
-`sweep.py` owns "what to run."
+`sweep.py`/`size_scan.py` own "what to run."
 
-- `NUM_SEEDS = 1`: seed replicates per config. `1` (default) reproduces a
-  plain single-seed sweep exactly — no MLflow nesting, no aggregation, run
-  names unchanged. `>1` runs each config that many times (different seeds),
-  grouped under one MLflow parent run per config via
-  `logged_training.replicate_group` (see below) — e.g. `NUM_SEEDS=3` turns
-  the 14 configs into 42 training runs.
+- `main(num_seeds=NUM_SEEDS, dataset="mnist", initial_classes=5,
+  classes_per_stage=1)`: runs `sweep.build_configs()`'s 14 configs.
+  `run_size_scan(num_seeds=1, dataset="mnist", initial_classes=5,
+  classes_per_stage=1, hidden_sizes_scan=None, channels_scan=None)`: same
+  shape, running `size_scan.build_size_scan_configs()`'s scan instead. Both
+  are also reachable from the command line via `--num-seeds`/`--dataset`/
+  `--initial-classes`/`--classes-per-stage`, plus `--scan {sweep,size}` to
+  choose between them (see `_parse_args`).
+- `NUM_SEEDS = 1`: the default seed-replicate count. `1` reproduces a plain
+  single-seed run exactly — deterministic seed `0`, no MLflow nesting, no
+  aggregation, run names unchanged. `>1` draws that many distinct *random*
+  seeds (`_draw_seeds`, recorded via the `seed` MLflow param and each
+  replicate's results filename) and runs each once, grouped under one
+  MLflow parent run per config via `logged_training.replicate_group` (see
+  below) — e.g. `num_seeds=3` turns 14 configs into 42 training runs.
 - `REPO_ROOT = Path(__file__).resolve().parent.parent`: same anchoring
   pattern as `logged_training.py`'s `REPO_ROOT`, for the same reason —
   `RESULTS_DIR = REPO_ROOT / "results"` (per-run JSON accuracy dumps) and
-  `get_mnist_data(root=str(REPO_ROOT / "data"))` (in `main()`) both used to
-  be cwd-relative (`Path("../results")`, `root="data"`) and, since one
-  assumed launching from `src/` and the other from the repo root, no single
-  invocation location got both right — anchoring both fixes it regardless of
-  cwd.
-- `main()`: downloads MNIST, builds the stages, creates `RESULTS_DIR`, and
-  calls `_run_config` once per `sweep.build_configs()` entry.
-- `_run_config(config, stages, device)`: picks a replicate context via
-  `_get_replicate_context` (below), then loops `range(NUM_SEEDS)` calling
-  `_run_seed` and appending its result to the collector if replicating.
-- `_get_replicate_context(config) -> AbstractContextManager[list[tuple[float, float]] | None]`:
-  `logged_training.replicate_group(config, NUM_SEEDS)` if `NUM_SEEDS > 1`,
+  `get_mnist_data(root=str(REPO_ROOT / "data"))` (in `_prepare_run`) both
+  used to be cwd-relative (`Path("../results")`, `root="data"`) and, since
+  one assumed launching from `src/` and the other from the repo root, no
+  single invocation location got both right — anchoring both fixes it
+  regardless of cwd.
+- `_prepare_run(dataset, initial_classes, classes_per_stage)`: shared setup
+  for `main`/`run_size_scan` — picks the device, downloads/loads `dataset`,
+  builds `stages` off `data.build_stage_digits(initial_classes,
+  classes_per_stage)`, creates `RESULTS_DIR`.
+- `_run_configs(configs, stages, device, num_seeds, dataset)`: loops
+  `_run_config` once per entry in `configs` (either sweep's or the size
+  scan's).
+- `_run_config(config, stages, device, num_seeds, dataset)`: draws this
+  config's seeds via `_draw_seeds`, prints them (for reproducibility even
+  without digging into MLflow/results), picks a replicate context via
+  `_get_replicate_context`, then loops the drawn seeds calling `_run_seed`
+  and appending its result to the collector if replicating.
+- `_draw_seeds(num_seeds) -> list[int]`: `[0]` if `num_seeds == 1`
+  (unchanged, deterministic default), else `num_seeds` distinct seeds drawn
+  via `random.SystemRandom().randrange` — random *only* once multi-seed
+  replication is opted into, so the default single-seed sweep's
+  reproducibility (lab-book.md: "every run sets a fixed seed... reproducible
+  run-to-run") isn't silently lost.
+- `_get_replicate_context(config, num_seeds) -> AbstractContextManager[list[tuple[float, float]] | None]`:
+  `logged_training.replicate_group(config, num_seeds)` if `num_seeds > 1`,
   else `contextlib.nullcontext()`.
-- `_run_seed(config, seed, stages, device) -> tuple[float, float]`: one
-  seed's full pipeline — seeds `torch.manual_seed` *before*
+- `_run_seed(config, seed, stages, device, num_seeds, dataset) -> tuple[float, float]`:
+  one seed's full pipeline — seeds `torch.manual_seed` *before*
   `sweep.build_model` (covers both weight init and the training loop's
   `DataLoader` shuffling, since nothing else consumes RNG state in between),
   calls `logged_training.run_and_log`, computes `avg_accuracy`/
   `backward_transfer` from the returned per-stage accuracy, writes results,
   and returns the two metrics for the caller to collect if replicating.
-- `_build_seed_variant(config, seed)`: per-seed copy of `config` via
-  `dataclasses.replace` — sets `seed`, and suffixes `name` with `_seed{seed}`
-  only when `NUM_SEEDS > 1` (so single-seed run names stay exactly what they
-  were before replication support existed).
+- `_build_seed_variant(config, seed, num_seeds, dataset)`: per-seed,
+  per-dataset copy of `config` via `dataclasses.replace` — sets
+  `seed`/`dataset`, and suffixes `name` with the dataset (only when it's not
+  `"mnist"`) and `_seed{seed}` (only when `num_seeds > 1`), so default runs
+  keep exactly the names they had before either feature existed, while
+  non-default runs never collide with the default's results file/MLflow run
+  name.
 - `_write_results(name, accuracy_by_stage, avg_acc, bwt)`: dumps
   `RESULTS_DIR/{name}.json` and prints the summary line + accuracy matrix.
 
@@ -217,7 +279,7 @@ not this repo's custom training loop; see lab-book.md, "Logging: MLflow").
   of, `replicate_group`'s own exception below — the shapes differ: here a
   factory hands back a closure that mutates its caller's list, there the
   caller declares and appends to its own list). Does not call
-  `mlflow.pytorch.log_model` — with `NUM_SEEDS > 1`, dozens of runs ×
+  `mlflow.pytorch.log_model` — with `num_seeds > 1`, dozens of runs ×
   checkpoints is needless disk churn for an exploratory sweep.
 - `replicate_group(config, num_seeds) -> Iterator[list[tuple[float, float]]]`:
   context manager grouping `num_seeds` seed replicates under one parent
@@ -251,6 +313,7 @@ not this repo's custom training loop; see lab-book.md, "Logging: MLflow").
 │   ├── models.py
 │   ├── run_config.py
 │   ├── run_experiments.py
+│   ├── size_scan.py
 │   ├── sweep.py
 │   └── train.py
 ├── tests
@@ -260,6 +323,7 @@ not this repo's custom training loop; see lab-book.md, "Logging: MLflow").
 │   ├── test_logged_training.py  # against a real local sqlite backend
 │   ├── test_models.py
 │   ├── test_run_experiments.py  # against a real local sqlite backend
+│   ├── test_size_scan.py
 │   ├── test_sweep.py
 │   └── test_train.py
 ```
@@ -282,10 +346,16 @@ modules, not implementation code.
   (the one combo with no such boundedness guarantee, see the module's docstring).
 - `tests/test_data.py`: assert stage `k`'s train set is the superset of stage
   `k-1`'s labels plus exactly one new label; assert test set always contains all 10
-  digits.
+  digits; `build_stage_digits` defaults reproduce `STAGE_DIGITS`, cover every
+  class exactly once for a range of `initial_classes`/`classes_per_stage`
+  combos (including an unevenly-dividing remainder and `initial_classes=1`),
+  and reject out-of-range/non-positive args; `get_mnist_data`'s `dataset`
+  param picks the right class per name (monkeypatched dataset classes, no
+  real download).
 - `tests/test_models.py`: `FCNN_AI2` with non-default (including 3-element,
   i.e. depth-varying) `hidden_sizes` produces correctly-shaped output and the
-  right number/width of hidden layers.
+  right number/width of hidden layers; `CNN`'s `channels` param likewise
+  produces the right conv channel counts and output shape.
 - `tests/test_train.py`: `run_incremental_training` invokes `on_epoch_end`
   exactly `len(stages) * epochs_per_stage` times and `on_stage_end` exactly
   `len(stages)` times, on a tiny fake dataset (no real MNIST, no MLflow); and
@@ -314,20 +384,32 @@ modules, not implementation code.
   failure skips aggregation and leaves the parent run FAILED;
   `replicate_group(config, 1)` raises before touching MLflow.
 - `tests/test_run_experiments.py`: exercises `_run_config`/`_run_seed`/
-  `_get_replicate_context` against the same real-sqlite-backend pattern as
-  `test_logged_training.py`, plus monkeypatching `run_experiments.RESULTS_DIR`
-  (to `tmp_path`) and `run_experiments.NUM_SEEDS` per test. Covers:
-  `NUM_SEEDS=1` writes one result JSON and a flat (non-nested) MLflow run;
-  `NUM_SEEDS=2` writes one result JSON per seed and produces a nested
-  parent+children MLflow structure with aggregate metrics on the parent;
-  `_get_replicate_context` dispatches to `contextlib.nullcontext` vs. a real
-  `replicate_group` context manager correctly; `_run_seed`'s returned
-  `(avg_accuracy, backward_transfer)` matches values independently
-  re-derived from its own written result JSON.
+  `_get_replicate_context`/`_draw_seeds` against the same real-sqlite-backend
+  pattern as `test_logged_training.py`, plus monkeypatching
+  `run_experiments.RESULTS_DIR` (to `tmp_path`) per test. Covers:
+  `num_seeds=1` writes one result JSON, a flat (non-nested) MLflow run, and
+  always uses seed `0`; `num_seeds=2`/`3` write one result JSON per seed,
+  produce a nested parent+children MLflow structure with aggregate metrics
+  on the parent, and draw distinct (not sequential `0, 1, 2...`) seeds, each
+  recorded on its child run's `seed` param; `_get_replicate_context`
+  dispatches to `contextlib.nullcontext` vs. a real `replicate_group`
+  context manager correctly; `_run_seed`'s returned `(avg_accuracy,
+  backward_transfer)` matches values independently re-derived from its own
+  written result JSON; a non-`"mnist"` `dataset` suffixes the result
+  filename/MLflow run name and is recorded as the `dataset` param, so it
+  can't collide with the same config's `"mnist"` result.
+- `tests/test_size_scan.py`: mirrors `test_sweep.py`'s checks (unique names,
+  every config's `build_model` succeeds without raising) plus: size-scan
+  names never collide with `sweep.build_configs()`'s own names; hidden
+  sizes/channels actually shrink step over step; every step includes both
+  the ai2 grid and the FCNN/CNN controls; built models' shapes match their
+  config's `hidden_sizes`/`channels`; mismatched-length
+  `hidden_sizes_scan`/`channels_scan` raises.
 - `uv run pytest -q` for all of the above.
 - `ruff check` / `ruff format --check` / `ty check` clean.
 - Smoke-run `run_experiments.py` for 2 epochs/stages on all 14 configs (or a
   subset), confirm no NaNs/crashes, that the accuracy matrix + BWT numbers
   are produced, and that the MLflow runs show up (`mlflow ui
   --backend-store-uri sqlite:///mlflow.db`) before committing to
-  full-length runs.
+  full-length runs. Same for `--scan size` and `--dataset fashion_mnist`
+  before committing to full-length runs on either.

@@ -23,7 +23,19 @@ def test_every_config_builds_a_model_without_raising() -> None:
 def test_cnn_config_builds_cnn() -> None:
     config = RunConfig(name="x", sweep_axis="base", model_kind="cnn", epochs_per_stage=1)
 
-    assert isinstance(build_model(config), CNN)
+    model = cast(CNN, build_model(config))
+    assert isinstance(model, CNN)
+    assert model.conv1.out_channels == 16  # CNN's own default, unaffected by channels=None
+
+
+def test_cnn_config_with_channels_builds_shrunk_cnn() -> None:
+    config = RunConfig(
+        name="x", sweep_axis="base", model_kind="cnn", epochs_per_stage=1, channels=(4, 8)
+    )
+
+    model = cast(CNN, build_model(config))
+    assert model.conv1.out_channels == 4
+    assert model.conv2.out_channels == 8
 
 
 def test_fcnn_config_builds_fcnn_with_matching_hyperparameters() -> None:

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from autapse import Activation_Scheme, AI2_Variant
+from data import DatasetName
 
 ModelKind = Literal["cnn", "fcnn"]
 
@@ -24,10 +25,16 @@ class RunConfig:
         model_kind: Discriminates which model `build_model` constructs.
             Explicit rather than inferred from `ai2_variant is None`, since
             the latter would silently accept a half-specified FCNN config.
+        dataset: Which dataset this run trains/evaluates on ("mnist" or
+            "fashion_mnist"). Logged like any other param so switching
+            datasets never silently collides with a same-named run on the
+            other dataset -- see `run_experiments._build_seed_variant`.
         ai2_variant: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         activation_scheme: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         T: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         hidden_sizes: `None` for `model_kind="cnn"`; required for `"fcnn"`.
+        channels: `None` for `model_kind="fcnn"`; optional for `"cnn"` (falls
+            back to `models.CNN`'s own default `(16, 32)` when unset).
         capture_y_self_per_epoch: Log a per-neuron y_self history artifact,
             one snapshot per epoch. See `dynamics_insights.get_y_self_per_neuron`.
         capture_y_self_per_batch: Log a per-neuron y_self history artifact,
@@ -39,6 +46,7 @@ class RunConfig:
     sweep_axis: str
     model_kind: ModelKind
     epochs_per_stage: int
+    dataset: DatasetName = "mnist"
     seed: int = 0
     lr: float = 1e-3
     batch_size: int = 128
@@ -46,5 +54,6 @@ class RunConfig:
     activation_scheme: Activation_Scheme | None = None
     T: int | None = None
     hidden_sizes: tuple[int, ...] | None = None
+    channels: tuple[int, int] | None = None
     capture_y_self_per_epoch: bool = False
     capture_y_self_per_batch: bool = False

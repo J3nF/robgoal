@@ -42,14 +42,21 @@ class FCNN_AI2(nn.Module):
 
 
 class CNN(nn.Module):
-    """Small conv net control: 2x(conv+relu+pool) + FC, no self-inhibition."""
+    """Small conv net control: 2x(conv+relu+pool) + FC, no self-inhibition.
 
-    def __init__(self) -> None:
+    Args:
+        channels: Output channel count of (conv1, conv2), in order. Shrinking
+            this is the CNN control's equivalent of FCNN_AI2's `hidden_sizes`
+            for the network-size scan (see `size_scan.py`).
+    """
+
+    def __init__(self, channels: tuple[int, int] = (16, 32)) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        conv1_channels, conv2_channels = channels
+        self.conv1 = nn.Conv2d(1, conv1_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2)
-        self.output = nn.Linear(32 * 7 * 7, 10)
+        self.output = nn.Linear(conv2_channels * 7 * 7, 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool(torch.relu(self.conv1(x)))

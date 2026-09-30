@@ -160,7 +160,7 @@ def build_model(config: RunConfig) -> nn.Module:
     guard against a malformed `RunConfig`, not an expected input.
     """
     if config.model_kind == "cnn":
-        return CNN()
+        return CNN(channels=config.channels) if config.channels is not None else CNN()
     assert config.T is not None
     assert config.ai2_variant is not None
     assert config.activation_scheme is not None

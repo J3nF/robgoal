@@ -222,12 +222,30 @@ TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight nor
 
 ### Focused experiments
 
-For all the following, use 5 randomly chosen random seeds.
+For all the following, use 5 randomly chosen random seeds: `--num-seeds 5`
+(or `num_seeds=5`) now draws that many distinct random seeds per config
+(recorded via the `seed` MLflow param and each replicate's results
+filename) instead of the sequential `0, 1, ...` used before this was
+implemented -- see `implementation_doc.md`, "Experiment runner:
+`run_experiments.py`".
 
-- [ ] Compare networks of increasingly smaller...
-  - [ ] Size (100, 75, 50, 25) and...
-  - [ ] Epoch size (10, 5, 2);
-- [ ] Make networks learn one (of, e.g., three representationally different) number(s) at a time (instead of 0-4, 5, 6,...).
+- [x] Compare networks of increasingly smaller...
+  - [x] Size: `--scan size` (or `run_experiments.run_size_scan()`) runs
+    `size_scan.py`'s scan -- ai2 variants, FCNN controls, and the CNN
+    control, all shrinking together, 5 steps by default. Epoch size isn't
+    part of this scan; use `sweep.py`'s existing `EPOCHS_SWEEP` for that, or
+    pass a smaller `epochs_per_stage` directly.
+  - [ ] Epoch size (10, 5, 2) -- not part of the new size scan, see above.
+- [x] Make networks learn one (of, e.g., three representationally different) number(s) at a time (instead of 0-4, 5, 6,...): `--initial-classes`/`--classes-per-stage` (or `initial_classes`/`classes_per_stage`) control `data.build_stage_digits`'s split now -- e.g. `--initial-classes 1 --classes-per-stage 1` starts from a single digit.
 - [ ] Try out different learning rates (1e-(2,3,4)).
   - H₁: Higher `lr` prevents convergence?
   - H₂: Too small `lr` prevents sigmoids to converge?
+
+### Dataset: FashionMNIST
+
+Added `data.py`'s `dataset` param (`"mnist"`/`"fashion_mnist"`,
+`--dataset`/`dataset=` throughout `run_experiments.py`) as a second
+class-incremental benchmark alongside MNIST, same 10-class/1x28x28 shape so
+nothing downstream needed to change. Non-`"mnist"` runs get their result
+filename/MLflow run name suffixed with the dataset name, so switching
+datasets never overwrites the other's results.
