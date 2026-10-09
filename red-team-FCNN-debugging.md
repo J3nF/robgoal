@@ -1,13 +1,14 @@
 # Red-team: `FCNN-debugging`
 
-Scope: incremental diff from `serious-scan` (default SGD `lr` raised `1e-3` → `0.1`, new
-`--lr` flag, plus this branch's own `BUGS.md`/`IDEAS.md` — a prior review's bug list and
-refactor/academic analysis — and test additions). See `red-team-serious-scan.md` and
+Scope: incremental diff from `serious-scan` at `43c53dd` (this branch's base; `serious-scan`
+has since gained `7f11486`, docs and style files only): default SGD `lr` raised `1e-3` → `0.1`,
+new `--lr` flag, plus this branch's own `BUGS.md`/`IDEAS.md` — a prior review's bug list and
+refactor/academic analysis — and test additions. See `red-team-serious-scan.md` and
 `red-team-main.md` for inherited issues, both still present and unaddressed here.
 
-Methodology note: findings 1-3 below were derived independently (own reading + own empirical
-checks) before reading `BUGS.md`/`IDEAS.md`, per the agreed review plan. Section "Cross-check"
-at the end compares against those two files directly, as instructed.
+Method: findings 1-3 below were derived independently (own reading and own empirical checks)
+before reading `BUGS.md`/`IDEAS.md`, so the "Cross-check" section at the end is an independent
+comparison and not a restatement.
 
 Verified directly in a disposable worktree: `uv sync --extra cpu`, `uv run pytest -q` → all
 passed (including this branch's new `tests/test_train.py` regression test), `uv run ty check`
@@ -28,25 +29,27 @@ whether it pushes `relu_sigmoid`+`ai2_gate` — whose inhibition iteration has n
 contraction for large pre-activations — into practice during real training. Tested via 300 SGD
 steps on a fixed batch at each base config's own `lr`: no NaNs, all `relu_sigmoid` variants
 converge smoothly; tracking pre-activation magnitude for `ai2_gate` specifically, it reached
-roughly double the instability threshold IDEAS.md's analysis cites, with no divergence.
+roughly double the instability threshold IDEAS.md's analysis cites (`BUGS.md` #4: slope
+magnitude reaches 1 at roughly $a \approx 3$), with no divergence.
 
 This is weaker evidence of a real problem than "may diverge" suggests, though: `ai2_gate`'s
-output is bounded by construction (`a·(1−tanh(·))`, with `tanh` bounded in `(−1,1)`), so true
-numerical blow-up (NaN/Inf) is structurally close to impossible regardless of `lr`. The
-legitimate open question is narrower — possible *oscillation that degrades training quality*
-over a full multi-epoch, multi-stage run with real data drift, not numerical divergence — and
-that narrower question is still untested by the one-fixed-batch smoke test here or by anything
-in `BUGS.md`/`IDEAS.md`.
+output $a\,(1 - \tanh(\cdot))$ is bounded by construction, since $\tanh$ is bounded in
+$(-1, 1)$, so true numerical blow-up (NaN/Inf) is structurally close to impossible regardless
+of `lr`. The legitimate open question is narrower — possible *oscillation that degrades
+training quality* over a full multi-epoch, multi-stage run with real data drift, not numerical
+divergence. One fixed batch cannot show that, and nothing in `BUGS.md`/`IDEAS.md` tests it.
+TODO: log pre-activation magnitude / `y_self` curves (`dynamics_insights.get_y_self_absmeans`
+already exists) across a full real sweep run and look for non-monotonic or oscillating
+patterns, not only NaNs.
 
 ## 3. [Sharpens `BUGS.md` #2] The even-`T` degenerate case kills the whole network, not just one layer
 
 `BUGS.md` #2 calls `ai2_diff`+`sigmoid` at even `T` a "dead layer." Verified: it's a dead
-*network*. `FCNN_AI2.forward` (`src/models.py`) has no skip/residual path, so a first hidden
-layer that's an exact-zero function of its input (per the algebraic cancellation in
-`red-team-main.md` #1) forces the second hidden layer's input to zero too, which — by the same
-cancellation — forces *its* output to zero as well. The final output is then exactly
-`self.output.bias`, identical across unrelated random inputs, with zero gradient on every
-upstream parameter. `BUGS.md`'s phrasing undersells how total the collapse is.
+*network*. `FCNN_AI2.forward` (`src/models.py`) has no skip/residual path, so the first hidden
+layer's exact-zero output (cancellation derived in `red-team-main.md` #1) zeroes the second
+hidden layer's input, which by the same cancellation zeroes *its* output. The final output is
+then exactly `self.output.bias`, identical across unrelated random inputs, with zero gradient
+on every upstream parameter. "Dead layer" understates how total the collapse is.
 
 ## 4. [Not in `BUGS.md`/`IDEAS.md`] `ty check` failures are undocumented
 
@@ -65,21 +68,7 @@ guard against even `T`." That only addresses the single instance in `sweep.py`'s
 each of its 5 size steps — see `red-team-serious-scan.md` #2 — and this is mentioned nowhere in
 either file.
 
-## Cross-check against this branch's own `BUGS.md`/`IDEAS.md`
-
-Independently re-derived, and confirmed accurate (no disagreements found), 9 of `BUGS.md`'s 11
-"Fixed"/"Open" items: the `lr` bug, the `ai2_diff`+`sigmoid` identity/dead-layer behavior, the
-lab-book/code formula mismatch (#3: book says `relu(y_raw − tanh(...))`, code computes
-`relu(Wx+b) − tanh(...)`, no outer `relu` — confirmed by reading `_get_inhibited_output`), the
-cumulative-replay/BWT caveat, partial seeding, silent result overwrites, gitignored `results/`,
-the global SSL monkeypatch, and the setup pitfalls (bare `uv sync`, `requires-python>=3.14`,
-`main.py` stub). `IDEAS.md` §2's contraction analysis (2.1-2.2) independently matches this
-report's own derivation of the no-temporal-memory point (`red-team-main.md` #4) and the
-optimizer-circularity point (`red-team-main.md` #3, matched by `IDEAS.md`'s §3 follow-up #1
-flagging the sigmoid rows need re-running at a working `lr`). No factual error was found in
-either file.
-
-## Additional issue (noticed during verification, in neither list)
+## 6. [Needs testing — noticed during verification, in neither list] `lr=0.1` was never checked at the largest config
 
 The new global `lr=0.1` default was validated by this branch's own lab-book entry only against
 the base sweep's default-sized models and against short smoke batches here — it was never
@@ -88,3 +77,23 @@ specifically checked against the sweep's largest-capacity config,
 `src/sweep.py`). `IDEAS.md` §2.4 lists "a per-family tuned `lr`" as a missing control in
 general, but doesn't flag that the one `lr` value actually shipped was never validated against
 that specific, largest config.
+TODO: a short real run of that config at `lr=0.1`, checking whether `lr` is too high for the
+larger model.
+
+## Cross-check against this branch's own `BUGS.md`/`IDEAS.md`
+
+Independently re-derived, and confirmed accurate (no disagreements found), 9 of `BUGS.md`'s 11
+"Fixed"/"Open" items: the `lr` bug (#1), the `ai2_diff`+`sigmoid` identity/dead-layer behavior
+(#2), the lab-book/code formula mismatch (#3: book says
+$\mathrm{relu}(y_\text{raw} - \tanh(\cdot))$, code computes
+$\mathrm{relu}(Wx + b) - \tanh(\cdot)$ with no outer $\mathrm{relu}$ — confirmed by reading
+`_get_inhibited_output`), the cumulative-replay/BWT caveat (#5), partial seeding (#6), silent
+result overwrites (#7), gitignored `results/` (#8), the global SSL monkeypatch (#9), and the
+setup pitfalls (#10: bare `uv sync`, `requires-python>=3.14`, `main.py` stub). The other two
+are not in this list: #4 (`ai2_gate` contraction) is the subject of finding 2 above, and #11
+(single-run results) is not covered by this report.
+
+Two further matches with `IDEAS.md`: its §2 contraction analysis (2.1-2.2) independently
+matches this report's own derivation of the no-temporal-memory point (`red-team-main.md` #4),
+and its §3 follow-up #1 (re-run the sigmoid rows at a working `lr`) matches the
+optimizer-circularity point (`red-team-main.md` #3). No factual error was found in either file.

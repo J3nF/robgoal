@@ -2,15 +2,18 @@
 
 Scope: incremental diff from `main` only (`src/size_scan.py` new; `src/data.py`,
 `src/run_experiments.py`, `src/run_config.py`, `src/models.py`, `src/sweep.py` extended for
-seed/size/dataset/class-split scanning; new tests; `scan-list.md`). See `red-team-main.md` for
-baseline issues inherited unchanged from `main` (notably: the `ai2_diff`+`sigmoid`
-identity/collapse bug, and the cumulative-replay/BWT concern — both still present and, per
-below, amplified by this branch's new code).
+seed/size/dataset/class-split scanning; new tests; `scan-list.md`). Baseline issues inherited
+unchanged from `main` are in `red-team-main.md`; both of its critical ones (#1, the
+`ai2_diff`+`sigmoid` identity/collapse bug, and #2, the cumulative-replay/BWT concern) are
+still present here. Only the first is amplified by this branch's new code (finding 2 below).
 
-Verified directly in this checkout: `uv sync --extra cpu` (torch installs fine),
-`uv run pytest -q` → **78 passed**, `uv run ruff check .` → **clean**. Findings below were
-independently re-run by an adversarial subagent, which confirmed all five and reproduced the
-same tool output.
+Verified directly in this checkout at `43c53dd` (the HEAD when the review was written):
+`uv sync --extra cpu` (torch installs fine), `uv run pytest -q` → **78 passed**,
+`uv run ruff check .` → **clean**. `serious-scan` has since gained `7f11486`, which changes
+only docs, `.gitignore` and the style files (no `src/` or `tests/`), so these results still
+hold; finding 3 is the exception and is updated below. Findings were independently re-run at
+`43c53dd` by an adversarial subagent, which confirmed all five and reproduced the same tool
+output.
 
 ## 1. [HIGH, verified] `ty check` is not clean — new Optional-narrowing errors
 
@@ -38,19 +41,24 @@ check` clean as a completion criterion — this branch doesn't meet it. Trivial 
 `ai2_variant="ai2_diff"` + `activation_scheme="sigmoid"` each time. Per `red-team-main.md` #1,
 that combination at odd `T` is mathematically identical to the corresponding `T=1` control.
 So this branch doesn't just inherit the one pre-existing duplicate-run instance from
-`sweep.py` — it adds 5 more (one per size step), all guaranteed-identical pairs dressed up as
-35 distinct configs.
+`sweep.py`: it adds 5 more (one per size step). 5 of the scan's 35 configs (5 steps × 7 per
+step) are guaranteed duplicates of a same-step control.
 
-## 3. [MEDIUM, housekeeping — self-aware tradeoff, flagged for completeness] `CLAUDE.md`/`WRITING_STYLE.md` untracked
+## 3. [MEDIUM, housekeeping — fixed on this branch at `7f11486`, still open on the branches below it] `CLAUDE.md`/`WRITING_STYLE.md` untracked
 
-Commits `d1586fc` ("Add LLM contexts to repo and gitignore, ironically") and `57ef9df`
-("Untrack ignored files") — both ancestors of this branch — moved `CLAUDE.md`/`WRITING_STYLE.md`
-(and `CODING_STYLE.md`) into `.gitignore` under a `# Personal additions` comment and removed
-them from tracking. Confirmed still untracked at this branch's HEAD
-(`git ls-tree serious-scan -r` has no hits for either file). Not a hidden bug — the commit
-message names the irony itself — but worth recording: a fresh clone from `serious-scan`
-onward has neither file unless recreated locally, and `WRITING_STYLE.md`'s rules (which the
-lab book's own prose follows) are no longer part of the shared, reviewable repo history.
+At `43c53dd`: commits `d1586fc` ("Add LLM contexts to repo and gitignore, ironically") and
+`57ef9df` ("Untrack ignored files") — both ancestors of this branch — had moved
+`CLAUDE.md`/`WRITING_STYLE.md` (and `CODING_STYLE.md`) into `.gitignore` under a `# Personal
+additions` comment and removed them from tracking (`git ls-tree serious-scan -r` had no hits
+for either file). Not a hidden bug — the commit message names the irony itself — but a fresh
+clone from `serious-scan` onward would have had neither file unless recreated locally, and
+`WRITING_STYLE.md`'s rules (which the lab book's own prose follows) were not part of the
+shared, reviewable repo history.
+
+Status: `7f11486` re-tracked `CLAUDE.md`, `WRITING_STYLE.md` and `CODING_STYLE.md` and removed
+the `# Personal additions` block from `.gitignore` (its message: "Fix Claude ignoring style
+guides due to them being gitignored"). `FCNN-debugging` and `python-modularisation`, both based
+on `43c53dd`, still ignore the files (`.gitignore:623-626`) and do not track them.
 
 ## 4. [LOW, verified] Multi-seed replicate seeds aren't reproducible ahead of time
 

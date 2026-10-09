@@ -7,22 +7,25 @@ confirmed by direct computation (seeded model construction/forward/backward). Ad
 re-verified by an independent subagent against the live worktree — verdicts below include its
 findings.
 
+Findings 1-7 are the original review, ordered by severity. Findings 8-10 were added later (see
+the section before the closing observations); they are not severity-ordered with 1-7, so that
+the `#N` numbers other reports cite stay valid.
+
 ## 1. [CRITICAL] `ai2_diff` + `sigmoid` degenerates to either a duplicate or a dead, constant network
 
 `AutapticLayer._step`/`_get_inhibited_output` (`src/autapse.py:103-121`) feeds each unroll
-step's own *output* back as the next step's inhibition signal. For `ai2_variant="ai2_diff"`,
-`activation_scheme="sigmoid"`, with `s = sigmoid(linear(x))` constant across the unroll (same
-`x` every step, see docstring at `src/autapse.py:20-24`):
+step's own *output* back as the next step's inhibition signal. Notation: $T$ is the number of
+unroll steps, $s = \sigma(Wx + b)$ the sigmoid activation of the layer's linear map, and $y_t$
+the layer output after step $t$, with $y_0 = 0$. For `ai2_variant="ai2_diff"`,
+`activation_scheme="sigmoid"`, $s$ is constant across the unroll (same $x$ every step, see
+docstring at `src/autapse.py:20-24`), so
 
-```
-y1 = s - 0 = s
-y2 = s - y1 = 0
-y3 = s - y2 = s
-...
-```
+$$
+y_t = s - y_{t-1} \quad\Rightarrow\quad y_1 = s,\; y_2 = 0,\; y_3 = s,\; y_4 = 0,\; \dots
+$$
 
 This is exact, not a numerical approximation — confirmed by building `T=1` vs `T=3` models
-with identical seeds: `torch.equal(T1_output, T3_output) == True`. For even `T`, the layer's
+with identical seeds: `torch.equal(T1_output, T3_output) == True`. For even $T$, the layer's
 output is a hard zero, algebraically independent of its own weights — confirmed `T=2`'s
 gradient on every hidden-layer parameter is exactly `0.0`.
 
@@ -49,7 +52,10 @@ in `build_stages`), never a replacement. For any architecture that trains adequa
 digits keep getting rehearsed every stage, so `backward_transfer` ("the forgetting measure,"
 `docs/lab-book.md`, "Evaluation metrics") is expected to hover near/above zero regardless of
 whether `ai2` helps. A quick confirmatory run (SGD, `T=1`, deliberately short) gave
-`BWT=+0.62` — net improvement, not forgetting, consistent with this.
+`BWT=+0.62` — net improvement, not forgetting, consistent with this. Uncertainty: this is one
+run (n=1), so seed variance is unmeasured; it illustrates the mechanism, it does not quantify it.
+TODO: repeat over several seeds, and under a protocol without replay, to see how large the
+suppression is.
 
 `docs/lab-book.md` discloses the cumulative design choice itself ("Class-incremental data
 protocol") but never connects it to this consequence; `docs/Mini_project_meta_continual_learning.md`'s
@@ -70,6 +76,8 @@ difference, without a control for the alternative explanation that SGD's general
 The lab book is partially self-aware of this (line 177's TODO to log gradient/weight norms "to
 check the ... reasoning above directly rather than inferring it from accuracy"), which tempers
 but doesn't resolve the gap — no such control currently exists.
+TODO: add that logging, or a control that changes the compute graph without `ai2` at the same
+`lr`, and compare the size of the effect.
 
 ## 4. [MEDIUM, academic — already a disclosed tradeoff, but inconsistently described elsewhere] No state persists across examples
 
@@ -106,14 +114,49 @@ anchoring, for the same brittleness reason.
 `relu_sigmoid`+`ai2_diff` formula (BUGS.md #3 on `FCNN-debugging`, see that branch's report) —
 docs drifting out of sync with the code they describe.
 
-## 7. [LOW, verified] Bare `uv sync` leaves an environment with no `torch`
+## 7. [LOW, verified] Setup pitfalls: bare `uv sync` has no `torch`; `requires-python>=3.14`; `main.py` stub
 
-`torch`/`torchvision` are declared only under `[project.optional-dependencies]` (`cpu`,
+(a) `torch`/`torchvision` are declared only under `[project.optional-dependencies]` (`cpu`,
 `cu130`), not `[project.dependencies]` (`pyproject.toml:7-21`). Reproduced: a bare `uv sync`
 installs everything else, then `import torch` raises `ModuleNotFoundError`. README.md does
 document `--extra=cpu`/`--extra=cu130`, but it's an easy first-run trap, and
 `implementation_doc.md`'s own "Verification" checklist's `uv run pytest -q` silently assumes
 the right extra was already chosen.
+
+(b) `pyproject.toml:6` sets `requires-python = ">=3.14"`, while the global standards name 3.13.
+(c) `main.py` is an unused stub that prints `Hello from robgoal!`. Also listed in
+`FCNN-debugging`'s `BUGS.md` #10 and confirmed in `red-team-FCNN-debugging.md`'s Cross-check;
+re-verified against `main`'s tree.
+
+## Added after the original review
+
+Findings 8-10 were not written up in the original report. They appear in `FCNN-debugging`'s
+`BUGS.md` (#7, #8, #9) and are confirmed in `red-team-FCNN-debugging.md`'s Cross-check, which
+is the only place the original reports mention them. Written up here because they originate on
+`main`; each was re-verified against `main`'s tree (line numbers below are `main`'s).
+
+## 8. [MEDIUM, verified] Reruns silently overwrite results and add duplicate MLflow runs
+
+`_write_results` (`src/run_experiments.py:81` on `main`; line 195 on `serious-scan`, 210 on
+`FCNN-debugging`) calls `write_text` on `results/{name}.json` unconditionally and prints no
+warning. `mlflow.start_run(run_name=config.name, ...)` (`src/logged_training.py:53,253`) never
+looks up an existing run of that name, so each rerun adds another MLflow run under the same
+name. A rerun after a code or `lr` change therefore replaces the earlier numbers without trace
+in `results/`, while MLflow accumulates same-named runs.
+
+## 9. [MEDIUM, verified] `results/` is gitignored, so reported numbers aren't reproducible from the repo
+
+`.gitignore` has both `/results/` (line 86) and `results/*` (line 612) — a harmless duplicate,
+identical on `main` and `serious-scan`. Numbers quoted in the lab book (and in
+`FCNN-debugging`'s `BUGS.md`) cannot be checked against the repo without re-running the sweep.
+
+## 10. [LOW-MEDIUM, verified] The SSL workaround is a process-wide side effect
+
+`get_mnist_data` (`src/data.py:56` on `main`; line 94 on `serious-scan` and `FCNN-debugging`)
+reassigns `ssl._create_default_https_context` permanently, not for the duration of the
+download. Every HTTPS context created later in the same process uses the certifi-based
+replacement (e.g. MLflow's own network calls (?)). Distinct from #5, which is the notebook's
+drifted copy of the same patch.
 
 ## Additional, lower-priority observations
 

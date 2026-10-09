@@ -1,21 +1,23 @@
-# Red-team: `python-modularisation`
+# Red-team: `IDEAS.md` §1 refactor options (`python-modularisation` branch)
 
-**Disclosure:** `python-modularisation` has zero commits beyond `serious-scan` — confirmed
-`git rev-parse python-modularisation` equals `git rev-parse serious-scan` (`43c53dd`), both
-locally and on `origin`. There is no modularisation plan or code anywhere on this branch.
+**Disclosure:** `python-modularisation` has no commits beyond `serious-scan`'s `43c53dd`
+(confirmed via `git rev-parse`, locally and on `origin`, when the review was written).
+`serious-scan` has since moved to `7f11486` (docs, `.gitignore` and style files only);
+`python-modularisation` is still at `43c53dd`. There is no modularisation plan or code anywhere
+on this branch.
 
-Per explicit instruction, this report instead red-teams `IDEAS.md` §1 (refactor options A-H:
-A=Python API with keyword overrides, B=grid/one-factor helpers, C=package + entry point
-[`src/*.py` → `src/robgoal/`], D=generic CLI overrides + config files, E=model registry,
-F=separate training from tracking, G=protocol/optimizer as config, H=speed via preloading
-tensors), which lives on `FCNN-debugging`, not this branch — it's the closest thing to a
-"plan to improve the codebase" that exists in the repo. Per the review brief, only findings
-that go *beyond* what `IDEAS.md` already concedes/caveats are reported; its own
-self-acknowledged caveats (e.g. "E and F are worth it only once a third model family is
-planned") are not repeated here as findings.
+The report therefore red-teams `IDEAS.md` §1 instead (refactor options A-H: A=Python API with
+keyword overrides, B=grid/one-factor helpers, C=package + entry point [`src/*.py` →
+`src/robgoal/`], D=generic CLI overrides + config files, E=model registry, F=separate training
+from tracking, G=protocol/optimizer as config, H=speed via preloading tensors). `IDEAS.md`
+lives on `FCNN-debugging`, not this branch, and is the closest thing to a "plan to improve the
+codebase" in the repo. Only findings that go *beyond* what `IDEAS.md` already concedes or
+caveats are reported; its own self-acknowledged caveats (e.g. "E and F are worth it only once a
+third model family is planned") are not repeated as findings.
 
-All five findings below were independently re-verified by an adversarial subagent against the
-actual `IDEAS.md` text and the code it discusses; verdicts reflect that pass.
+Findings 1-5 were independently re-verified by an adversarial subagent against the actual
+`IDEAS.md` text and the code it discusses; verdicts reflect that pass. Finding 6 was added
+afterwards and was not part of that pass.
 
 ## 1. [HIGH] Option C doesn't account for its own path-anchoring breakage
 
@@ -46,15 +48,19 @@ the same blind spot rather than flagging it.
 ## 3. [MEDIUM, quantified] Option H is undersold and dropped from the suggested order with no stated reason
 
 `IDEAS.md` hedges option H ("Speed (unverified)... would probably cut per-run time a lot...
-Profile first.") Benchmarked directly instead of trusting the hedge: one real epoch over MNIST
+Profile first."). Benchmarked directly instead of trusting the hedge: one real epoch over MNIST
 stage 0 (30,596 images) via the current per-epoch `DataLoader`+transform path takes ~2.0s;
 preloading all tensors once (a ~3.15s one-time cost) and indexing per epoch thereafter takes
-~0.008s — roughly a 250× per-epoch speedup after about 1.5 epochs of amortization. Given
-`epochs_per_stage` defaults to 5-10 and the sweep runs 14-35+ configs across up to 6 stages
-each, this is a substantially larger, cheaper win than "probably... profile first" conveys —
-and yet H is the one option left *out* of the document's own "Suggested order" paragraph
-("C, then A and B..., then D and G" — E/F explicitly deferred, H simply absent), with no
-reason given for the omission.
+~0.008s — roughly a 250× per-epoch speedup of the data path, after about 1.6 epochs of
+amortization ($3.15 / (2.0 - 0.008) \approx 1.58$). Given `epochs_per_stage` defaults to 5-10
+and the sweep runs 14-35+ configs across up to 6 stages each, this is a substantially larger,
+cheaper win than "probably... profile first" conveys — and yet H is the one option left *out*
+of the document's own "Suggested order" paragraph ("C, then A and B..., then D and G" — E/F
+explicitly deferred, H simply absent), with no reason given for the omission.
+
+Uncertainty: the timings cover the data path only, from one benchmark. The speedup of a whole
+run also depends on forward/backward time, which was not measured here, so the end-to-end gain
+is smaller than 250×. TODO: time a full run with and without preloading.
 
 ## 4. [LOW-MEDIUM, narrowed after verification] CLI/doc migration is only partly addressed
 
@@ -75,7 +81,7 @@ sequencing dependency, that's in tension with "independent" — though the text 
 "roughly," so this is a fair but not airtight reading; it may just mean priority order rather
 than a hard prerequisite. Worth a one-line clarification either way, not a blocking issue.
 
-## Additional gap (not in the original draft)
+## 6. [MEDIUM, added after the verification pass] Existing results aren't covered by options D, E and G
 
 None of options D, E, or G address backward compatibility of *existing* data: `results/*.json`
 filenames and the `mlflow.db` run history were produced under the current `RunConfig` schema
