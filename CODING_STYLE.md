@@ -16,20 +16,20 @@ General coding principles, illustrated with generic examples. Rules, not prose.
 - One responsibility per function. Separate "compute a candidate" from "decide whether to apply it" from "apply it" — don't fuse these into one function.
 - If several functions share parameters, use the same name and the same order for those parameters everywhere. Inconsistent ordering is a common source of call-site bugs.
 - Prefer returning new values over in-place mutation. Where mutation is unavoidable, copy the input explicitly first, then mutate the copy — never mutate a caller's value silently.
-- If functions mutate inputs in-place, make this visible by appending "!" or another conventionalized signifier.
+- If functions mutate inputs in-place, make this visible by appending "!" or another conventionalised signifier.
 - In search/optimization loops, return as soon as an improving candidate is found rather than scanning exhaustively, when order doesn't affect correctness (e.g. shuffle first, then take the first improvement).
 
 ## Documentation
 
-- Every public function gets a doc comment with: the call signature, a one-line summary, and one line per non-obvious parameter explaining its meaning (not just its type).
-- Use an explicit, `grep`-able placeholder (e.g. `TBW`, `TODO`) for documentation not yet written, rather than leaving the function undocumented. Visible unfinished work beats silent gaps.
+- Every public function gets a doc comment with: the call signature, a one-line summary of its purpose — why it exists / what problem it solves, not a mechanical restatement of its steps — and one line per non-obvious parameter explaining its meaning (not just its type).
+- Use an explicit, greppable placeholder (e.g. `TBW`, `TODO`) for documentation not yet written, rather than leaving the function undocumented. Visible unfinished work beats silent gaps.
 - Document non-obvious invariants or gotchas in the doc comment, not just what the function computes — e.g. why a threshold check exists, or what would break without it.
 - Keep documentation in the code short and to the point. Provide concise reasons, no extensive prose.
-- Naming a concept isn't enough, for a doc string, function name, or variable name alike — state the relationship to it: is it, does it, computes it, or holds data for it (e.g. "Data for one step of X" vs "Runs one step of X", not just "One step of X").
+- Naming a concept isn't enough, for a docstring, function name, or variable name alike — state the relationship to it: is it, does it, computes it, or holds data for it (e.g. "Data for one step of X" vs "Runs one step of X", not just "One step of X").
 
 ## Comments
 
-- Comment only the "why", never the "what". If a comment restates the code in words, delete it; if it explains a reason the code itself can't express, keep it.
+- Comment only the "why", never a mechanical restatement of the "what". If a comment restates the code in words, delete it; if it explains a reason the code itself can't express, keep it. A doc-comment summary framed as purpose ("why this exists / what it's for") satisfies this too — purpose is how "why" doubles as the reader-facing "what".
 - Document a naming or structural convention once, where it's introduced, instead of repeating the explanation at every use site.
 
 ## Imports and dependencies

@@ -216,7 +216,7 @@ TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight nor
 
 - Compare 5 random Random Seeds results for each run!
 - For now, do not use sigmoid variants, since they seem to die off.
-- We think/hope our network can deal better with difficult/restricted conditions (small network sizes, few epochs, etc.).\n
+- We think/hope our network can deal better with difficult/restricted conditions (small network sizes, few epochs, etc.).
  => Implement experiments with such conditions.
 - TODO: Implement activity recording, not only `y_self` recording.
 

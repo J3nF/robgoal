@@ -620,7 +620,3 @@ results/*
 # explicitly -- ignore it too in case that ever silently stops applying.
 /mlruns/
 
-# Personal additions
-CODING_STYLE.md
-CLAUDE.md
-WRITING_STYLE.md
