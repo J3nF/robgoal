@@ -159,7 +159,7 @@ Same pure config/model-factory shape as `sweep.py`, sibling module (not a
 `sweep.py` function) so `sweep.build_configs()`'s own base tests stay exactly
 what they were. See lab-book.md, "ToDos 2026-08-26 or so".
 
-- `FCNN_HIDDEN_SIZES_SCAN`/`CNN_CHANNELS_SCAN`: 5 progressively smaller
+- `FCNN_HIDDEN_SIZES_SCAN`/`CNN_CHANNELS_SCAN`: 8 progressively smaller
   width/channel-count steps for the FCNN and CNN families respectively (same
   length, validated in `build_size_scan_configs`; not meant to match in
   absolute numbers — `CNN`'s default `(16, 32)` is already narrow relative

@@ -7,7 +7,7 @@ import pytest
 
 from autapse import AutapticLayer
 from models import CNN, FCNN_AI2
-from size_scan import build_size_scan_configs
+from size_scan import FCNN_HIDDEN_SIZES_SCAN, build_size_scan_configs
 from sweep import build_configs, build_model
 
 
@@ -41,7 +41,7 @@ def test_hidden_sizes_and_channels_shrink_across_steps() -> None:
 
 def test_every_step_includes_ai2_and_control_families() -> None:
     configs = build_size_scan_configs()
-    num_steps = 5
+    num_steps = len(FCNN_HIDDEN_SIZES_SCAN)
     for step in range(num_steps):
         step_configs = [c for c in configs if c.name.startswith(f"sizescan_step{step}_")]
         assert any(c.model_kind == "cnn" for c in step_configs)

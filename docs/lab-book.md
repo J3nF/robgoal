@@ -232,7 +232,9 @@ implemented -- see `implementation_doc.md`, "Experiment runner:
 - [x] Compare networks of increasingly smaller...
   - [x] Size: `--scan size` (or `run_experiments.run_size_scan()`) runs
     `size_scan.py`'s scan -- ai2 variants, FCNN controls, and the CNN
-    control, all shrinking together, 5 steps by default. Epoch size isn't
+    control, all shrinking together, 8 steps by default (down to FCNN
+    hidden_sizes `(2, 1)` / CNN channels `(1, 1)`, deep enough to overwhelm a
+    10-class classifier's capacity). Epoch size isn't
     part of this scan; use `sweep.py`'s existing `EPOCHS_SWEEP` for that, or
     pass a smaller `epochs_per_stage` directly.
   - [ ] Epoch size (10, 5, 2) -- not part of the new size scan, see above.

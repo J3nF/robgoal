@@ -11,13 +11,33 @@ MLflow, no torch training.
 from run_config import RunConfig
 from sweep import ANCHOR_VARIANT, BASE_EPOCHS_PER_STAGE, BASE_T, SCHEMES, VARIANTS
 
-# Each step shrinks both families by roughly half. channels_scan is CNN's
-# equivalent of hidden_sizes_scan -- both lists must be the same length
-# (validated in build_size_scan_configs), but their absolute numbers aren't
-# meant to match: CNN's default (16, 32) is already narrow compared to
-# FCNN's default (256, 128).
-FCNN_HIDDEN_SIZES_SCAN: list[tuple[int, ...]] = [(256, 128), (128, 64), (64, 32), (32, 16), (16, 8)]
-CNN_CHANNELS_SCAN: list[tuple[int, int]] = [(16, 32), (12, 24), (8, 16), (6, 12), (4, 8)]
+# Each step shrinks both families by roughly half, down to widths that should
+# genuinely overwhelm a 10-class classifier's capacity (FCNN (2, 1), CNN
+# (1, 1)) rather than just "smaller". channels_scan is CNN's equivalent of
+# hidden_sizes_scan -- both lists must be the same length (validated in
+# build_size_scan_configs), but their absolute numbers aren't meant to match:
+# CNN's default (16, 32) is already narrow compared to FCNN's default
+# (256, 128).
+FCNN_HIDDEN_SIZES_SCAN: list[tuple[int, ...]] = [
+    (256, 128),
+    (128, 64),
+    (64, 32),
+    (32, 16),
+    (16, 8),
+    (8, 4),
+    (4, 2),
+    (2, 1),
+]
+CNN_CHANNELS_SCAN: list[tuple[int, int]] = [
+    (16, 32),
+    (12, 24),
+    (8, 16),
+    (6, 12),
+    (4, 8),
+    (2, 4),
+    (1, 2),
+    (1, 1),
+]
 
 
 def build_size_scan_configs(
