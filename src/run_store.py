@@ -453,7 +453,11 @@ def _format_lab_book_entry(
     launch_id: str, started: datetime, git: GitInfo, spec: LaunchSpec
 ) -> str:
     """Markdown for one entry: auto-filled fields, then the user's text verbatim."""
-    split = f"{spec.initial_classes} / {spec.classes_per_stage}"
+    split = (
+        None
+        if spec.initial_classes is None or spec.classes_per_stage is None
+        else f"{spec.initial_classes} / {spec.classes_per_stage}"
+    )
     fields = [
         ("Started", started.isoformat(timespec="seconds")),
         ("Branch", git.branch),

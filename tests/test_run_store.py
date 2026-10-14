@@ -750,3 +750,15 @@ def test_extra_meta_is_stored_and_cannot_replace_standard_keys(
         run_store.build_meta(launch, config, extra_meta={"device": "gpu"}, **common)
 
     assert run_store.open_run(path).meta["torch_num_threads"] == 3
+
+
+def test_unset_optional_fields_are_left_out_of_the_lab_book_entry(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    spec = _spec(initial_classes=None, classes_per_stage=None, workers=None, use_mlflow=None)
+
+    _begin(git_repo, tmp_path, spec)
+
+    entry = (git_repo / "docs" / "lab-book.md").read_text()
+    assert "None" not in entry
+    assert "Initial classes" not in entry and "Workers" not in entry and "MLflow" not in entry
