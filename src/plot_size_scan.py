@@ -10,6 +10,7 @@ across all given launches, so pass only launches that should be combined.
 
 import argparse
 import csv
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -21,6 +22,7 @@ import size_scan
 import sweep
 from data import DatasetName
 from run_config import RunConfig
+from run_store import RunFile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results"
@@ -70,6 +72,7 @@ def main(paths: list[Path], plots_dir: Path) -> None:
     """Writes the two figures and `scan_summary.csv` for the scan runs found under `paths`."""
     runs = plotting_utils.load_runs(*paths)
     points = collect_scan_points(runs)
+    _warn_if_mixed(runs)
     plotting_utils.plot_setup()
     write_summary_csv(points, plots_dir / "scan_summary.csv")
     for metric, ylabel, reference in (
@@ -82,7 +85,7 @@ def main(paths: list[Path], plots_dir: Path) -> None:
     print(f"Wrote {plots_dir / 'scan_summary.csv'}")
 
 
-def collect_scan_points(runs: list) -> list[ScanPoint]:
+def collect_scan_points(runs: list[RunFile]) -> list[ScanPoint]:
     """Aggregates the 1-class-at-a-time size-scan runs per canonical config and dataset.
 
     Follows `size_scan.build_size_scan_configs` order; config/dataset pairs without runs are
@@ -106,17 +109,22 @@ def collect_scan_points(runs: list) -> list[ScanPoint]:
             bwt = np.array([run.meta["metrics"]["final_backward_transfer"] for run in group])
             points.append(
                 ScanPoint(
-                    config.name,
-                    family_of(config),
-                    dataset,
-                    size,
-                    len(group),
-                    float(accuracy.mean()),
-                    float(accuracy.std()),
-                    float(bwt.mean()),
-                    float(bwt.std()),
+                    config_name=config.name,
+                    family=family_of(config),
+                    dataset=dataset,
+                    param_count=size,
+                    num_seeds=len(group),
+                    accuracy_mean=float(accuracy.mean()),
+                    accuracy_std=float(accuracy.std()),
+                    bwt_mean=float(bwt.mean()),
+                    bwt_std=float(bwt.std()),
                 )
             )
+    if not points:
+        raise ValueError(
+            "Size-scan runs exist but none matches a canonical config of "
+            "size_scan.build_size_scan_configs() (custom widths?); nothing to plot."
+        )
     return points
 
 
@@ -172,7 +180,7 @@ def _plot_metric(points: list[ScanPoint], metric: str, ylabel: str, reference: t
                 linewidth=1,
                 label=f"{family} ({dataset})",
             )
-    assert ax is not None  # collect_scan_points raises on an empty selection
+    assert ax is not None  # collect_scan_points raises if there are no points
     value, label = reference
     ax.axhline(value, color="gray", linestyle=":", linewidth=0.5)
     ax.annotate(label, (0, value), xycoords=("axes fraction", "data"), fontsize="x-small")
@@ -180,6 +188,21 @@ def _plot_metric(points: list[ScanPoint], metric: str, ylabel: str, reference: t
     ax.set_ylabel(ylabel)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=False, fontsize="xx-small")
     return ax
+
+
+def _warn_if_mixed(runs: list[RunFile]) -> None:
+    """Warns on stderr when the pooled scan runs come from different commits or learning rates."""
+    scan_runs = plotting_utils.select_runs(
+        runs, sweep_axis="size_scan", initial_classes=1, classes_per_stage=1
+    )
+    commits = {run.meta["git"]["commit"] for run in scan_runs}
+    learning_rates = {plotting_utils.run_field(run, "lr") for run in scan_runs}
+    if len(commits) > 1 or len(learning_rates) > 1:
+        print(
+            f"WARNING: pooling runs from {len(commits)} commit(s) {sorted(map(str, commits))} and "
+            f"lr values {sorted(learning_rates)}; pass only launches that belong together.",
+            file=sys.stderr,
+        )
 
 
 def _parse_args() -> argparse.Namespace:

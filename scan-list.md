@@ -1,8 +1,9 @@
 # Scan list
 
 How to run each scan via `src/run_experiments.py`'s CLI, or the matching
-function call directly (`PYTHONPATH=src`, e.g. `uv run python -c "..."`, or
-from a script under `src/`). All flags compose.
+function call directly (`PYTHONPATH=src uv run python -c "import run_experiments; ..."`,
+or from a script under `src/`; the Python snippets below assume `import run_experiments`).
+All flags compose.
 
 Every launch **requires** `--goal`, `--method` and `--code-changes` (free text,
 copied verbatim into `docs/lab-book.md`; `--code-changes` is how big source
@@ -17,7 +18,8 @@ Further flags on every command below:
 - `--workers N` (default 1: sequential, in-process): N spawned worker
   processes, one config (with all its seeds) per job. A job that fails is
   retried once; at the end, still-failed jobs are listed and the exit code is
-  1 (finished runs are kept). Exit code 2 = refused before starting.
+  1 (finished runs are kept). Exit code 2 = refused before starting (bad arguments, dirty
+  tree, existing launch directory).
 - `--no-mlflow`: do not import or configure MLflow (it is only a live viewer;
   the `.h5` files are the record). An MLflow error never loses results but is
   reported at the end with exit code 1.

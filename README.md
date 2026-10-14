@@ -59,7 +59,8 @@ This downloads MNIST on first run (to `data/`), trains every config in
 - writes one HDF5 file per run to `results/{launch_id}/{run_name}.h5`, holding
   the full config, git provenance and the arrays (per-stage accuracy, loss per
   epoch, `y_self`); open them with `src/run_store.py` / `src/plotting_utils.py`,
-- prints an accuracy matrix + summary line per run,
+- prints an accuracy matrix + summary line per run (sequential launches; with
+  `--workers N` one progress line per finished job),
 - live-logs params/metrics to a local [MLflow](https://mlflow.org/) tracking
   database (`mlflow.db`, with artifacts in `mlartifacts/`) unless you pass
   `--no-mlflow`; MLflow is only a viewer, the `.h5` files are the record.

@@ -43,7 +43,6 @@ __all__ = [
     "RunExistsError",
     "RunFile",
     "RunFileError",
-    "append_lab_book_entry",
     "begin_launch",
     "build_meta",
     "get_dirty_paths",
@@ -92,10 +91,10 @@ class RunFileError(ValueError):
 
 @dataclass(frozen=True)
 class GitInfo:
-    """Commit and branch of a code state. `None` means unknown (legacy imports)."""
+    """Full commit hash and branch name (`"detached"` for a detached HEAD) of a code state."""
 
-    commit: str | None
-    branch: str | None
+    commit: str
+    branch: str
 
 
 @dataclass(frozen=True)
@@ -112,7 +111,6 @@ class LaunchSpec:
         initial_classes, classes_per_stage: The class split every run in the launch uses.
         workers: Parallel worker processes, `None` if not applicable.
         use_mlflow: Whether live MLflow tracking is on, `None` if not applicable.
-        notes: Optional extra paragraph appended to the entry.
     """
 
     goal: str
@@ -127,7 +125,6 @@ class LaunchSpec:
     classes_per_stage: int | None = None
     workers: int | None = None
     use_mlflow: bool | None = None
-    notes: str = ""
 
     def validate(self) -> None:
         """Raises `ValueError` naming the flag if a required text field is missing or blank."""
@@ -182,7 +179,7 @@ class Launch:
         if head == self.git.commit:
             return
         diff = _git(
-            self.repo_root, "diff", "--no-renames", "--name-only", "-z", str(self.git.commit), head
+            self.repo_root, "diff", "--no-renames", "--name-only", "-z", self.git.commit, head
         )
         allowed = _lab_book_relative(self.repo_root, self.lab_book)
         changed = sorted(path for path in diff.split("\0") if path and path != allowed)
@@ -337,8 +334,6 @@ def begin_launch(
 
 def make_launch_id(git: GitInfo, started: datetime) -> str:
     """`YYYY-MM-DD-HH-mm_{git7}` from the local start time and the 7-char commit hash."""
-    if git.commit is None:
-        raise ValueError("A launch needs a known commit hash.")
     return f"{started.strftime('%Y-%m-%d-%H-%M')}_{git.commit[:7]}"
 
 
@@ -479,7 +474,6 @@ def _format_lab_book_entry(
         ("Goal", spec.goal),
         ("Method", spec.method),
         ("Code changes", spec.code_changes),
-        ("Notes", spec.notes),
     ):
         if text.strip():
             lines += [f"### {heading}", "", text.strip(), ""]

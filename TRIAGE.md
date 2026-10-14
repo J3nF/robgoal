@@ -272,7 +272,7 @@ in `red-team-python-modularisation.md`, under the same numbers (P1 = #1, … P6 
 ### P1. Option C would break `REPO_ROOT` anchoring
 
 Moving `src/*.py` to `src/robgoal/` makes `REPO_ROOT = Path(__file__).resolve().parent.parent`
-(`src/run_experiments.py:20`, `src/logged_training.py:20`) resolve to `src/`, not the repo
+(now `src/run_experiments.py`, `src/experiment_jobs.py` and `src/plot_size_scan.py`; originally `run_experiments.py:20`, `logged_training.py:20`) resolve to `src/`, not the repo
 root — silently relocating `results/`, `mlflow.db`/`mlartifacts/`, and the MNIST download dir.
 **Action when executing C:** update both to `.parent.parent.parent` in the same commit as the
 move.

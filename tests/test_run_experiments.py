@@ -613,3 +613,17 @@ def test_a_permanently_dying_job_does_not_take_the_healthy_jobs_down_with_it(
     assert sorted(p.name for p in launch.directory.glob("*.h5")) == [
         f"good{i}.h5" for i in range(5)
     ]
+
+
+def test_custom_scan_widths_appear_in_the_recorded_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+    monkeypatch.setattr(
+        run_experiments, "run_launch", lambda configs, request, scan, env: seen.append(request)
+    )
+
+    run_experiments.run_size_scan(
+        goal="g", method="m", code_changes="c", hidden_sizes_scan=[(4, 2)], channels_scan=[(2, 4)]
+    )
+
+    assert "hidden_sizes_scan=[(4, 2)]" in seen[0].command
+    assert "channels_scan=[(2, 4)]" in seen[0].command

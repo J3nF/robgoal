@@ -74,7 +74,7 @@ class MlflowSession:
         self._guarded("begin_group", self._start_run, config, False)
 
     def end_group(self, final_metrics: list[tuple[float, float]]) -> None:
-        """Logs mean/stdev of the replicates' `(avg_accuracy, backward_transfer)`, ends the group."""
+        """Logs mean/stdev of the replicates' final `(avg_accuracy, bwt)` and ends the group."""
         self._guarded("end_group", _log_replicate_aggregates, final_metrics)
         self._end_run("FINISHED")
 

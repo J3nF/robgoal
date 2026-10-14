@@ -170,7 +170,11 @@ def _make_request(arguments: dict, command: str | None, function: str) -> Launch
     fields = {f.name for f in dataclasses.fields(LaunchRequest)} - {"command"}
     values = {key: arguments[key] for key in fields}
     if command is None:
-        call = ", ".join(f"{key}={value!r}" for key, value in sorted(values.items()))
+        shown = dict(values)
+        for key in ("hidden_sizes_scan", "channels_scan"):
+            if arguments.get(key) is not None:
+                shown[key] = arguments[key]
+        call = ", ".join(f"{key}={value!r}" for key, value in sorted(shown.items()))
         command = f"run_experiments.{function}({call})"
     return LaunchRequest(**values, command=command)
 

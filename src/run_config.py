@@ -5,7 +5,7 @@ Split out from `run_experiments.py` so `logged_training.py` can depend on
 """
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 from autapse import Activation_Scheme, AI2_Variant
 from data import DatasetName
@@ -39,11 +39,11 @@ class RunConfig:
         hidden_sizes: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         channels: `None` for `model_kind="fcnn"`; optional for `"cnn"` (falls
             back to `models.CNN`'s own default `(16, 32)` when unset).
-        capture_y_self_per_epoch: Log a per-neuron y_self history artifact,
+        capture_y_self_per_epoch: Store a per-neuron y_self history dataset in the run file,
             one snapshot per epoch. See `dynamics_insights.get_y_self_per_neuron`.
-        capture_y_self_per_batch: Log a per-neuron y_self history artifact,
+        capture_y_self_per_batch: Store a per-neuron y_self history dataset in the run file,
             one snapshot per training batch. Opt-in: on a full sweep this can
-            accumulate a large number of records.
+            produce large files.
     """
 
     name: str
@@ -63,18 +63,6 @@ class RunConfig:
     channels: tuple[int, int] | None = None
     capture_y_self_per_epoch: bool = False
     capture_y_self_per_batch: bool = False
-
-
-def config_from_dict(fields: dict[str, Any]) -> RunConfig:
-    """Rebuilds a `RunConfig` from its JSON form (e.g. a run file's `meta["config"]`).
-
-    JSON turns the tuple fields (`hidden_sizes`, `channels`) into lists; this restores them,
-    since `sweep.build_model` and equality checks expect tuples.
-    """
-    restored: dict[str, Any] = {
-        key: tuple(value) if isinstance(value, list) else value for key, value in fields.items()
-    }
-    return RunConfig(**restored)
 
 
 @dataclass(frozen=True)

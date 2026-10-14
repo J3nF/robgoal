@@ -247,7 +247,7 @@ def plot_activity_heatmap(
 
 
 def save_figure(target: Figure | Axes, path: Path, **savefig_kwargs: Any) -> Path:
-    """Saves the figure of `target` to `path`, creating the directory; rcParams `savefig.*` apply."""
+    """Saves the figure of `target` to `path` (making its directory), using `savefig.*` rcParams."""
     figure = target.get_figure(root=True) if isinstance(target, Axes) else target
     assert figure is not None, "Axes is not attached to a figure"
     path = Path(path)

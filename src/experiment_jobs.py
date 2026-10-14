@@ -159,7 +159,7 @@ def init_worker() -> None:
     """Worker-process initializer: one torch thread, so N workers do not oversubscribe cores.
 
     Single-thread reductions sum in a different order than multi-thread ones, so a parallel
-    launch can differ from a sequential one in the last digits (up to ~1 pp accuracy on real
+    launch can differ from a sequential one in the last digits (up to ~0.8 pp accuracy on real
     MNIST runs). Every run file therefore records `torch_num_threads`.
     """
     torch.set_num_threads(1)

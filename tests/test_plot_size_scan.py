@@ -126,3 +126,33 @@ def test_family_of_classifies_controls_and_ai2_variants() -> None:
     assert families["fcnn_control_relu_sigmoid_hidden256x128"] == "fcnn_control_relu"
     assert families["fcnn_control_sigmoid_hidden256x128"] == "fcnn_control_sigmoid"
     assert families["fcnn_ai2_gate_relu_sigmoid_hidden256x128"] == "fcnn_ai2_gate_relu_sigmoid"
+
+
+def test_size_scan_runs_without_a_canonical_config_raise_instead_of_plotting_nothing(
+    launch: Launch,
+) -> None:
+    custom = size_scan.build_size_scan_configs([(4, 2)], [(2, 4)])[1]  # not a default-width name
+    _write_scan_run(launch, custom, "mnist", 1, 0.8, 0.0)
+
+    with pytest.raises(ValueError, match="none matches a canonical config"):
+        plot_size_scan.collect_scan_points(plotting_utils.load_runs(launch.directory))
+
+
+def test_pooling_runs_from_different_commits_or_learning_rates_warns(
+    scan_launch: Launch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = size_scan.build_size_scan_configs()[0]
+    _write_scan_run(scan_launch, config, "mnist", 99, 0.5, 0.0, lr=0.001)
+
+    plotting_runs = plotting_utils.load_runs(scan_launch.directory)
+    plot_size_scan._warn_if_mixed(plotting_runs)
+
+    assert "WARNING: pooling runs" in capsys.readouterr().err
+
+
+def test_runs_from_one_commit_and_lr_do_not_warn(
+    scan_launch: Launch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plot_size_scan._warn_if_mixed(plotting_utils.load_runs(scan_launch.directory))
+
+    assert capsys.readouterr().err == ""

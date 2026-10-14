@@ -93,8 +93,7 @@ the FCNN-only `ai2_variant`, `activation_scheme`, `T`, `hidden_sizes`, and the
 CNN-only `channels` (all `None` for the other `model_kind`). Lives in its own
 module — `sweep.py` (to build configs), `recorded_training.py`, `logged_training.py` and
 `experiment_jobs.py` all need the type, and `run_experiments.py` imports them; putting
-`RunConfig` in any of those would risk a circular import. `config_from_dict` rebuilds one from a
-run file's `meta["config"]` (JSON lists back to tuples), and `MlflowSettings` (tracking URI,
+`RunConfig` in any of those would risk a circular import. `MlflowSettings` (tracking URI,
 artifact location, experiment name) lives here so a worker's `Job` can carry it without importing
 mlflow.
 
@@ -200,8 +199,7 @@ so plotting code can import it cheaply. Public interface in `__all__`.
 - **Lab book** (`docs/lab-book.md`, tracked, append-only): one markdown entry per launch with
   the auto-filled fields (launch id, start time with timezone, branch, full commit, command
   line, scan, planned runs, dataset, seeds mode, class split, workers, MLflow on/off) and the
-  user's three texts verbatim. `append_lab_book_entry` is public (the one-off legacy import
-  wrote its entry through it).
+  user's three texts verbatim.
 - **Run file**: `results/{launch_id}/{run_name}.h5`, `run_id = "{launch_id}/{run_name}"`. The
   scalar string dataset `/meta_json` (a dataset, not an attribute: attributes are limited to
   64 KB) holds `run_id`, `run_name`, `launch_id`, `config_name` (the config's name before the
@@ -291,7 +289,8 @@ is what runs inside a worker. `sweep.py`/`size_scan.py` own "what to run."
   worker-independence; this is the conflict between them.)
 - After all jobs: `LaunchError` lists every job that still failed (with its traceback) and every
   swallowed MLflow error; the CLI prints it and exits 1. Exit 2 = refused before starting
-  (bad arguments, dirty tree, existing launch directory). Completed runs are always kept.
+  (bad arguments, dirty tree, existing launch directory; other setup failures, e.g. an unusable
+  MLflow backend or a non-git directory, are uncaught tracebacks). Completed runs are always kept.
 - `REPO_ROOT` anchoring: `RESULTS_DIR`, `LAB_BOOK` and the data directory are anchored to the
   repo root, so no invocation location gets one right and another wrong.
 
