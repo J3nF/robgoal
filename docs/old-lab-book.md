@@ -176,6 +176,18 @@ I also now log each `AutapticLayer`'s inhibition-signal (`y_self`) absolute mean
 
 TODO Ideas surfaced but not (yet) pursued: logging per-layer gradient/weight norms, to check the "SGD is sensitive to loss-landscape changes" reasoning above directly rather than inferring it from accuracy; `mlflow.enable_system_metrics_logging()` for CPU/GPU utilization, likely low value at this scale; a depth (not just width) sweep for `FCNN_AI2`, free now that `hidden_sizes` is a tuple of arbitrary length.
 
+**What moved where, and why (2026-10-14).**
+MLflow started as the place where everything about a run lived, and the 560-run scan showed why that does not hold up.
+Of 1146 MLflow runs only 14 carried a git commit (MLflow derives it from the *launching script's* path, and the scan was launched from a throwaway worker script outside the repo), none recorded a dirty tree, `initial_classes`/`classes_per_stage` were in neither the params nor any file name, and single-seed reruns silently overwrote `results/{name}.json`, which held nothing but the accuracy matrix.
+Worse, a stale artifact path made the last `log_text` call crash after training, so runs finished and wrote zero results: results depended on a viewer.
+I therefore flipped the roles.
+The canonical record is now one HDF5 file per run, `results/{launch_id}/{run_name}.h5`, holding the full config, our own git provenance (a launch refuses a dirty tree), the accuracy matrix, per-epoch loss and `y_self`, and (when the capture flags are on) the per-neuron `y_self` histories that used to be JSON artifacts in MLflow.
+Each launch also appends an entry (goal, method, code changes, written by me at launch time) to the new, append-only `docs/lab-book.md`; this file, `old-lab-book.md`, stays the place for reasoning.
+MLflow is kept, default on, as a *viewer* for live supervision (`--no-mlflow` drops it): it is tagged with `launch_id`, `run_id` and the commit from our own provenance, and an MLflow error can no longer lose or block results (the `.h5` is written first; mid-run MLflow errors are reported at the end instead of aborting training).
+`logged_training.py` is accordingly split into the always-on recording (`recorded_training.py`) and the optional MLflow adapter (`logged_training.py`); the mechanics are in `implementation_doc.md`.
+(?) Whether to keep MLflow at all is open: with the `.h5` files and `plotting_utils.py` the only thing it still offers is the live view, and at 12 parallel workers SQLite contention is a real cost (MLflow hard-codes a 20 s busy timeout per session).
+Still unsolved: `results/` is gitignored, so the numbers are not reproducible from the repo alone, but every file now names the commit that produced it. TODO decide whether to commit a results snapshot.
+
 ## Implemented tests
 
 All of these can be and are run locally, if not said otherwise.

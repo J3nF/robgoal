@@ -86,13 +86,17 @@ read — a plain tensor attribute, not a parameter/buffer, so it's invisible to
 varies relative to its sweep's anchor), `model_kind: Literal["cnn", "fcnn"]`
 (explicit discriminator `sweep.build_model` switches on, not inferred from
 `ai2_variant is None`), `dataset` (`"mnist"`/`"fashion_mnist"`, see
-`data.get_mnist_data`), `epochs_per_stage`, `seed`, `lr`, `batch_size`, plus
+`data.get_mnist_data`), `initial_classes`/`classes_per_stage` (the class split, see
+`data.build_stage_digits`; recorded so a 1-class-start run is never confused with a 5-class-start
+run), `epochs_per_stage`, `seed`, `lr`, `batch_size`, plus
 the FCNN-only `ai2_variant`, `activation_scheme`, `T`, `hidden_sizes`, and the
 CNN-only `channels` (all `None` for the other `model_kind`). Lives in its own
-module — both `sweep.py` (to build configs) and `logged_training.py` (to type
-`run_and_log`'s parameter) need the type, and `run_experiments.py` also
-imports `logged_training`; putting `RunConfig` in either of those two would
-create a circular import.
+module — `sweep.py` (to build configs), `recorded_training.py`, `logged_training.py` and
+`experiment_jobs.py` all need the type, and `run_experiments.py` imports them; putting
+`RunConfig` in any of those would risk a circular import. `config_from_dict` rebuilds one from a
+run file's `meta["config"]` (JSON lists back to tuples), and `MlflowSettings` (tracking URI,
+artifact location, experiment name) lives here so a worker's `Job` can carry it without importing
+mlflow.
 
 ## Dynamics: `dynamics_insights.py`
 
@@ -170,135 +174,173 @@ what they were. See old-lab-book.md, "ToDos 2026-08-26 or so".
   `activation_scheme` grid (`T=sweep.BASE_T`) at that step's hidden_sizes —
   i.e. every family in `sweep.build_configs()`'s base tests, just shrinking.
   Names are prefixed `sizescan_step{i}_` so they can never collide with
-  `sweep.build_configs()`'s own names (both write to the same flat
-  `results/{name}.json` namespace and MLflow's run-name-based comparison —
-  see `test_sweep.py`'s own unique-names test for why that collision matters).
+  `sweep.build_configs()`'s own names (run names are `.h5` file stems and MLflow run names —
+  see `test_sweep.py`'s own unique-names test for why a collision matters).
 
-## Experiment runner: `run_experiments.py`
+## Run provenance and storage: `run_store.py`
 
-Orchestration/IO only: seeding, training, MLflow logging, result reporting —
-`sweep.py`/`size_scan.py` own "what to run."
+One module to write and read run data; torch- and mlflow-free (it imports h5py and numpy only),
+so plotting code can import it cheaply. Public interface in `__all__`.
 
-- `main(num_seeds=NUM_SEEDS, dataset="mnist", initial_classes=5,
-  classes_per_stage=1)`: runs `sweep.build_configs()`'s 14 configs.
-  `run_size_scan(num_seeds=1, dataset="mnist", initial_classes=5,
-  classes_per_stage=1, hidden_sizes_scan=None, channels_scan=None)`: same
-  shape, running `size_scan.build_size_scan_configs()`'s scan instead. Both
-  are also reachable from the command line via `--num-seeds`/`--dataset`/
-  `--initial-classes`/`--classes-per-stage`, plus `--scan {sweep,size}` to
-  choose between them (see `_parse_args`).
-- `NUM_SEEDS = 1`: the default seed-replicate count. `1` reproduces a plain
-  single-seed run exactly — deterministic seed `0`, no MLflow nesting, no
-  aggregation, run names unchanged. `>1` draws that many distinct *random*
-  seeds (`_draw_seeds`, recorded via the `seed` MLflow param and each
-  replicate's results filename) and runs each once, grouped under one
-  MLflow parent run per config via `logged_training.replicate_group` (see
-  below) — e.g. `num_seeds=3` turns 14 configs into 42 training runs.
-- `REPO_ROOT = Path(__file__).resolve().parent.parent`: same anchoring
-  pattern as `logged_training.py`'s `REPO_ROOT`, for the same reason —
-  `RESULTS_DIR = REPO_ROOT / "results"` (per-run JSON accuracy dumps) and
-  `get_mnist_data(root=str(REPO_ROOT / "data"))` (in `_prepare_run`) both
-  used to be cwd-relative (`Path("../results")`, `root="data"`) and, since
-  one assumed launching from `src/` and the other from the repo root, no
-  single invocation location got both right — anchoring both fixes it
-  regardless of cwd.
-- `_prepare_run(dataset, initial_classes, classes_per_stage)`: shared setup
-  for `main`/`run_size_scan` — picks the device, downloads/loads `dataset`,
-  builds `stages` off `data.build_stage_digits(initial_classes,
-  classes_per_stage)`, creates `RESULTS_DIR`.
-- `_run_configs(configs, stages, device, num_seeds, dataset)`: loops
-  `_run_config` once per entry in `configs` (either sweep's or the size
-  scan's).
-- `_run_config(config, stages, device, num_seeds, dataset)`: draws this
-  config's seeds via `_draw_seeds`, prints them (for reproducibility even
-  without digging into MLflow/results), picks a replicate context via
-  `_get_replicate_context`, then loops the drawn seeds calling `_run_seed`
-  and appending its result to the collector if replicating.
-- `_draw_seeds(num_seeds) -> list[int]`: `[0]` if `num_seeds == 1`
-  (unchanged, deterministic default), else `num_seeds` distinct seeds drawn
-  via `random.SystemRandom().randrange` — random *only* once multi-seed
-  replication is opted into, so the default single-seed sweep's
-  reproducibility (old-lab-book.md: "every run sets a fixed seed... reproducible
-  run-to-run") isn't silently lost.
-- `_get_replicate_context(config, num_seeds) -> AbstractContextManager[list[tuple[float, float]] | None]`:
-  `logged_training.replicate_group(config, num_seeds)` if `num_seeds > 1`,
-  else `contextlib.nullcontext()`.
-- `_run_seed(config, seed, stages, device, num_seeds, dataset) -> tuple[float, float]`:
-  one seed's full pipeline — seeds `torch.manual_seed` *before*
-  `sweep.build_model` (covers both weight init and the training loop's
-  `DataLoader` shuffling, since nothing else consumes RNG state in between),
-  calls `logged_training.run_and_log`, computes `avg_accuracy`/
-  `backward_transfer` from the returned per-stage accuracy, writes results,
-  and returns the two metrics for the caller to collect if replicating.
-- `_build_seed_variant(config, seed, num_seeds, dataset)`: per-seed,
-  per-dataset copy of `config` via `dataclasses.replace` — sets
-  `seed`/`dataset`, and suffixes `name` with the dataset (only when it's not
-  `"mnist"`) and `_seed{seed}` (only when `num_seeds > 1`), so default runs
-  keep exactly the names they had before either feature existed, while
-  non-default runs never collide with the default's results file/MLflow run
-  name.
-- `_write_results(name, accuracy_by_stage, avg_acc, bwt)`: dumps
-  `RESULTS_DIR/{name}.json` and prints the summary line + accuracy matrix.
+- **Launch** = one invocation of the launcher. `begin_launch(spec, results_root, lab_book,
+  repo_root)` validates the required text (`--goal`/`--method`/`--code-changes`, non-blank),
+  refuses a dirty git tree (`require_clean_tree`: tracked changes, staged or not, and
+  untracked-but-not-ignored files; the lab book is the only exemption, since every launch
+  rewrites it), builds `launch_id = YYYY-MM-DD-HH-mm_{git7}` (local time), creates
+  `results/{launch_id}/` with `mkdir(exist_ok=False)` (a second launch in the same minute on
+  the same commit fails with `LaunchExistsError`; it is never suffixed or merged) and appends
+  one entry to the lab book. Everything that can refuse happens before anything is created; if
+  the lab-book append fails, the still-empty directory is removed again.
+- Git provenance is read by our own code (`get_git_info`, `get_dirty_paths`, all via `git` in
+  `repo_root`), not by MLflow, which derives it from the launching script's path and never
+  records a dirty tree. `Launch.verify_unchanged()` re-runs the check at the start of every
+  job (workers import code from the working tree minutes after launch): committing only the
+  lab book is allowed, any other edit or HEAD movement fails the job. Files marked
+  `assume-unchanged`/`skip-worktree` and gitignored source files are invisible to it.
+- **Lab book** (`docs/lab-book.md`, tracked, append-only): one markdown entry per launch with
+  the auto-filled fields (launch id, start time with timezone, branch, full commit, command
+  line, scan, planned runs, dataset, seeds mode, class split, workers, MLflow on/off) and the
+  user's three texts verbatim. `append_lab_book_entry` is public (the one-off legacy import
+  wrote its entry through it).
+- **Run file**: `results/{launch_id}/{run_name}.h5`, `run_id = "{launch_id}/{run_name}"`. The
+  scalar string dataset `/meta_json` (a dataset, not an attribute: attributes are limited to
+  64 KB) holds `run_id`, `run_name`, `launch_id`, `config_name` (the config's name before the
+  dataset/seed suffixes, so replicates group without parsing names), `config` (all `RunConfig`
+  fields), `git` (`commit`, `branch`, `dirty: false`), `started_at` (ISO-8601 with timezone),
+  `hostname`, `python`/`torch`/`numpy`/`h5py` versions, `device`, `torch_num_threads` and `metrics`
+  (`final_avg_accuracy`, `final_backward_transfer`, `train_seconds`). Arrays are datasets with a
+  `dims` attribute naming their axes; paths are free-form (`y_self_absmean/hidden_layers.0`),
+  so a future `/activations/{layer}` group needs no format change (not implemented). No
+  compression or chunking; HDF5 decompresses transparently, so it can be switched on later.
+- Datasets written by training: `accuracy` (stage, digit; float64, NaN for a digit a stage did
+  not evaluate), `train_loss` (epoch, indexed by global epoch), `y_self_absmean/{layer}`
+  (epoch) and, with `RunConfig.capture_y_self_per_epoch`/`_per_batch`,
+  `y_self_per_neuron_epoch/{layer}` (epoch, neuron) and `y_self_per_neuron_batch/{layer}`
+  (batch, neuron). The CNN has no `AutapticLayer`, hence no `y_self_*` datasets.
+- **Writes** (`write_run_file`, wrapped by `write_run`) are atomic and never overwrite:
+  raise `RunExistsError` if the file exists, else write `{name}.h5.tmp` (mode `"x"`, never
+  `"w"`; a stale `.tmp` from a crash is partial by construction and removed first), fsync,
+  `os.replace`. A file under its final name is always complete, so readers (and `list_runs`,
+  which skips `.tmp`) never see a partial run, and workers need no shared mutable file. Array
+  dtypes h5py cannot store are rejected when the `RunArray` is built, i.e. before training
+  results exist only in memory, not after.
+- **Reads**: `open_run(path) -> RunFile` parses and validates `meta` and closes the file; no
+  handle stays open (plotting 560 runs cannot exhaust file descriptors). `run.array(path)`
+  returns an `ArrayRef` (`shape`, `dtype`, `dims`; `ref[2:4, 3]` reads just that slice, `read()`
+  everything; every access reopens the file). `list_runs(path)` takes a launch directory or a
+  results root. Missing/corrupt `meta_json`, unknown dataset path and non-HDF5 files raise
+  `RunFileError` with the path and what is available.
+- Two writers of the same run name are not supported (one job per name per launch); the stale
+  `.tmp` cleanup would let them clobber each other.
 
-## Logging: `logged_training.py`
+## Training recorder: `recorded_training.py`
 
-MLflow adapter, manual (not autolog — autolog only covers PyTorch Lightning,
-not this repo's custom training loop; see old-lab-book.md, "Logging: MLflow").
+`train_and_record(config, model, stages, device, hooks=None) -> TrainingRecord` wraps
+`train.run_incremental_training` and always records accuracy per stage, loss and y_self absmean
+per epoch, and the optional per-neuron histories; `build_arrays(record)` turns that into the
+`RunArray`s above. `TrainingHooks` are optional extra callbacks (the MLflow viewer's), called
+after the recorder's own. Nothing here imports mlflow. The record's mutating closures follow the
+same documented exception to the mutation-avoidance rule as before: the callback-based training
+loop is the only place the values become available.
 
-- **Tracking backend**: `sqlite:///{repo_root}/mlflow.db`. MLflow 3.15 put
-  the plain `file:./mlruns` backend into maintenance mode (raises by
-  default), so this uses the sqlite backend MLflow itself recommends
-  instead. View runs with `uv run mlflow ui --backend-store-uri
-  sqlite:///mlflow.db` from the repo root, then open `localhost:5000`.
-- **Artifact location**: `file:{repo_root}/mlartifacts`, set explicitly via
-  `mlflow.create_experiment(..., artifact_location=...)` in
-  `_configure_mlflow()` the one time the `"ai2-mnist"` experiment doesn't
-  yet exist — a *new* experiment's default artifact location is cwd-relative
-  (`./mlruns`) independent of the tracking URI, so leaving it unset would
-  reintroduce the same cwd-dependence the sqlite tracking URI was anchored
-  to avoid.
-- `run_and_log(config, model, stages, device) -> list[dict[int, float]]`:
-  wraps `train.run_incremental_training` in `mlflow.start_run(run_name=
-  config.name, nested=mlflow.active_run() is not None)` — flat top-level run
-  when called standalone, nested child run when called from inside
-  `replicate_group`. Calls `_configure_mlflow()` (see above), then delegates
-  to 3 one-job helpers: `_get_loggable_params` (config's fields as params,
-  skipping `None`s and `name`/`sweep_axis` — the latter logged as a tag
-  instead); `_train_with_logging` (owns
-  `accuracy_by_stage`'s full lifecycle, runs training with `on_epoch_end`/
-  `on_stage_end` callbacks built by `_make_on_epoch_end`/`_make_on_stage_end`,
-  returns the accuracy list plus wall-clock seconds); `_log_final_metrics`
-  (`train_seconds`, final accuracy/BWT, the accuracy-matrix text artifact).
-  `_make_on_epoch_end` logs `train_loss` and `y_self_absmean_{layer_name}`
-  per epoch (`dynamics_insights.py`). `_make_on_stage_end` logs per-digit
-  accuracy, average accuracy (seen digits and all digits), and a running
-  `backward_transfer` per stage (`0.0` at stage 0 by construction — the
-  curve's fixed starting point, not a measurement) — its returned closure
-  mutates the caller-owned `accuracy_by_stage` list in place, a documented
-  exception to STYLE's mutation-avoidance rule (independent of, not a copy
-  of, `replicate_group`'s own exception below — the shapes differ: here a
-  factory hands back a closure that mutates its caller's list, there the
-  caller declares and appends to its own list). Does not call
-  `mlflow.pytorch.log_model` — with `num_seeds > 1`, dozens of runs ×
-  checkpoints is needless disk churn for an exploratory sweep.
-- `replicate_group(config, num_seeds) -> Iterator[list[tuple[float, float]]]`:
-  context manager grouping `num_seeds` seed replicates under one parent
-  MLflow run. `_check_num_seeds` fails fast (raises `ValueError`) before any
-  MLflow state is touched if `num_seeds < 2`. Yields a
-  `list[(avg_accuracy, backward_transfer)]` accumulator the caller appends
-  to across its own seed loop (an explicit exception to preferring return
-  values over mutation, STYLE.md — there's no return-based shape that
-  doesn't restructure the caller's loop just to avoid one `.append()`). On
-  clean exit, `_log_replicate_aggregates` asserts the collected count
-  matches `num_seeds` (`statistics.stdev` needs ≥2 points, and grouping a
-  single replicate isn't meaningful anyway, hence `_check_num_seeds`) and
-  logs `mean_final_avg_accuracy`/`std_final_avg_accuracy`/
-  `mean_final_backward_transfer`/`std_final_backward_transfer` onto the
-  parent run. If the `with` block raises partway through (e.g. one
-  replicate's training fails), the exception propagates before this
-  function's post-`yield` aggregation code runs at all (no `try`/`finally`
-  around `yield`, deliberately) — no misleading partial aggregate ever gets
-  logged, and MLflow's own `start_run` marks the parent run FAILED.
+## Experiment runner: `run_experiments.py`, `experiment_jobs.py`
+
+`run_experiments.py` is the launcher (CLI, planning, dispatch, reporting); `experiment_jobs.py`
+is what runs inside a worker. `sweep.py`/`size_scan.py` own "what to run."
+
+- `main(*, goal, method, code_changes, num_seeds=1, dataset="mnist", initial_classes=5,
+  classes_per_stage=1, workers=1, use_mlflow=True, command=None, env=None)` runs
+  `sweep.build_configs()`; `run_size_scan(...)` the same plus `hidden_sizes_scan`/
+  `channels_scan` for `size_scan.build_size_scan_configs()`. Both call
+  `run_launch(configs, request, scan, env)`, which is also the entry point for an injected
+  config list. CLI: `--scan {sweep,size}`, `--num-seeds`, `--dataset`, `--initial-classes`,
+  `--classes-per-stage`, `--workers`, `--no-mlflow`, and the required `--goal`, `--method`,
+  `--code-changes`. `LaunchEnv` holds results root, lab-book path, repo root, MLflow settings
+  and the stage builder (defaults: the repo's; tests inject temporary ones).
+- `run_launch` order: reject `workers < 1` -> `plan_jobs` (draw each config's seeds once, in the
+  parent, via `_draw_seeds`: `[0]` for `num_seeds == 1`, else `num_seeds` distinct random
+  seeds; reject duplicate run names) -> validate the lab-book text -> clean-tree check -> build
+  the stages once in the parent (fails fast on a bad class split and pre-downloads the dataset,
+  so workers never race on the download) -> with MLflow on, `logged_training.configure` once
+  (first use of a fresh database runs schema migrations, which fail when several workers race
+  to do it) -> `begin_launch` -> `execute_jobs`. Nothing is created before the last-but-one
+  step.
+- A **job** (`experiment_jobs.Job`, frozen and picklable; everything a spawned worker needs
+  travels inside it) is one config with all its seeds, so MLflow's parent/child nesting stays in
+  one process. `run_job` never raises: it returns a `JobOutcome` with the traceback text and any
+  swallowed MLflow errors. Per seed (`run_seed`): build the seed variant (`build_seed_variant`:
+  name suffixed with the dataset when not `"mnist"` and with `_seed{N}` when replicating),
+  check the target does not exist, `torch.manual_seed`, build the model, train and record,
+  **write the `.h5`**, then do the optional end-of-run MLflow logging. Workers build their own
+  stages from `(dataset, initial_classes, classes_per_stage)` (`build_stages_for`, cached per
+  process).
+- `execute_jobs(jobs, workers)`: `workers == 1` runs in-process; otherwise a
+  `ProcessPoolExecutor` with the `spawn` start method (torch/CUDA are not fork-safe) whose
+  workers set `torch.set_num_threads(1)`. A job that fails is retried once, on a fresh pool,
+  skipping seeds whose `.h5` exists (atomic writes make an existing file a complete run; on a
+  first attempt an existing file is an error). A dead worker (`BrokenProcessPool`) fails every
+  unfinished job of that round, so the retry round runs each job in its own single-worker pool
+  (`workers` at a time): only a job that really kills its process fails twice. The same seeds are used on retry.
+  With `workers > 1` jobs print nothing per stage; the parent prints one progress line per
+  finished job. Results should not depend on `workers`, with one known exception: workers run with one torch
+  thread (so N workers do not oversubscribe the cores) while an in-process run uses all of them, and
+  single-thread reductions sum in a different order. On real MNIST runs this changed final accuracy
+  by up to ~0.8 pp (seed 0, same code); with `torch.set_num_threads(1)` in-process the numbers were
+  identical. Every run file records `torch_num_threads`, so the two kinds of launch can be told apart;
+  compare parallel launches with parallel ones. (The brief demands both the single thread and
+  worker-independence; this is the conflict between them.)
+- After all jobs: `LaunchError` lists every job that still failed (with its traceback) and every
+  swallowed MLflow error; the CLI prints it and exits 1. Exit 2 = refused before starting
+  (bad arguments, dirty tree, existing launch directory). Completed runs are always kept.
+- `REPO_ROOT` anchoring: `RESULTS_DIR`, `LAB_BOOK` and the data directory are anchored to the
+  repo root, so no invocation location gets one right and another wrong.
+
+## Logging: `logged_training.py` (optional MLflow viewer)
+
+MLflow is a viewer for live supervision; the `.h5` files are the canonical record. This module
+is imported only when MLflow is on (`--no-mlflow` never imports or configures it; a test checks
+`sys.modules` in the parent and in spawned workers). Manual logging, not autolog (autolog only
+covers PyTorch Lightning, not this repo's custom training loop; see old-lab-book.md,
+"Logging: MLflow").
+
+- **Backend**: `sqlite:///{repo_root}/mlflow.db`, artifacts under `{repo_root}/mlartifacts`, set
+  via `MlflowSettings` (`run_config.py`). The experiment `"ai2-mnist"` is created by
+  `configure(settings)` with the explicit artifact location the one time it does not exist (a
+  new experiment's default artifact location is cwd-relative). View runs with `uv run mlflow ui
+  --backend-store-uri sqlite:///mlflow.db`.
+- `MlflowSession(settings, launch)` is one job's MLflow state: `begin_group` (parent run for
+  seed replicates) / `end_group` (mean/stdev of the replicates' final metrics), `begin_run`
+  (child or flat run; returns the live `TrainingHooks` that log `train_loss`,
+  `y_self_absmean_{layer}`, per-digit accuracy, average accuracy and a running backward
+  transfer), `log_final` (`train_seconds`, final accuracy/BWT, the accuracy-matrix text
+  artifact), `cleanup`. Runs are tagged `launch_id`, `run_id`, `sweep_axis` and
+  `mlflow.source.git.commit`/`.branch` from our own provenance; all `RunConfig` fields with a
+  value (including `initial_classes`/`classes_per_stage`) are params.
+- **MLflow can never lose results.** Every logging call is guarded: the first exception prints a
+  warning to stderr, disables further MLflow calls for the rest of the job, and is recorded in
+  `session.errors`; training and the `.h5` write continue. Teardown is never skipped: runs end
+  innermost first, and `cleanup` drains whatever is still open (status FAILED after a crash) so
+  a reused worker process cannot leak an active run into its next job.
+- **SQLite and many writers**: MLflow 3.15 hard-codes `PRAGMA busy_timeout = 20000` at the start
+  of every session (no setting), so only the connection-level timeout can be widened:
+  with `workers > 1` the tracking URI gets `?timeout=60` (`with_busy_timeout`). This does not
+  make concurrent writers contention-free.
+- The per-neuron y_self JSON artifacts (`y_self_per_neuron_*.json`) and `replicate_group` /
+  `run_and_log` are gone: the data is in the `.h5`, the grouping in `MlflowSession`.
+
+## Plotting: `plotting_utils.py`, `plot_size_scan.py`
+
+`plotting_utils.py` (numpy + matplotlib only) keeps the pipeline plain: `load_runs` ->
+`select_runs`/`group_runs` (config fields first, then top-level meta such as `config_name`) ->
+`stack_arrays` (seeds x ...; ragged shapes and empty groups raise with the offending runs) ->
+`mean_std` (population std, ddof=0) -> `plot_line_band`, `plot_epoch_curves`,
+`plot_accuracy_heatmap`, `plot_activity_heatmap` (each takes arrays and an optional `ax`, returns
+the `Axes`) -> `save_figure` (creates the directory, honours `savefig.*` rcParams).
+`plot_setup`/`get_colorcycle` set the house style (small figures, high save dpi, transparent).
+`plot_size_scan.py` is a thin script on top: size-scan runs with `initial_classes == 1`, grouped
+per config and dataset, written as `scan_summary.csv` plus the two figures. It pools seeds
+across every launch passed to it. After the legacy import its numbers equal the pre-pipeline
+`scan_summary.csv` to float precision (max abs difference 1.1e-16).
 
 ## Files
 
@@ -308,21 +350,33 @@ not this repo's custom training loop; see old-lab-book.md, "Logging: MLflow").
 │   ├── autapse.py
 │   ├── data.py
 │   ├── dynamics_insights.py
+│   ├── experiment_jobs.py
 │   ├── logged_training.py
 │   ├── metrics.py
 │   ├── models.py
+│   ├── plot_size_scan.py
+│   ├── plotting_utils.py
+│   ├── recorded_training.py
 │   ├── run_config.py
 │   ├── run_experiments.py
+│   ├── run_store.py
 │   ├── size_scan.py
 │   ├── sweep.py
 │   └── train.py
 ├── tests
 │   ├── test_autapse.py          # degeneracy, grad-flow, boundedness checks
 │   ├── test_data.py
+│   ├── conftest.py              # throwaway git repo + launch fixtures, Agg backend
+│   ├── fakes.py                 # tiny datasets/configs, failure-injecting stage builders
 │   ├── test_dynamics_insights.py
+│   ├── test_experiment_jobs.py
 │   ├── test_logged_training.py  # against a real local sqlite backend
 │   ├── test_models.py
-│   ├── test_run_experiments.py  # against a real local sqlite backend
+│   ├── test_plot_size_scan.py
+│   ├── test_plotting_utils.py
+│   ├── test_recorded_training.py
+│   ├── test_run_experiments.py  # includes spawned-worker launches
+│   ├── test_run_store.py
 │   ├── test_size_scan.py
 │   ├── test_sweep.py
 │   └── test_train.py
@@ -365,39 +419,47 @@ modules, not implementation code.
   `T>1` with a fixed seed (deterministic, not "usually nonzero"); `{}` for a
   `CNN` and for a model with no forward pass yet.
 - `tests/test_sweep.py`: all 14 `build_configs()` names are unique (a
-  collision would silently overwrite `RESULTS_DIR/{name}.json` and confuse
-  MLflow's run-name-based comparison); every config's `build_model` succeeds
+  duplicate would make two runs target the same `.h5` and confuse MLflow's run-name-based
+  comparison); every config's `build_model` succeeds
   without raising; CNN/FCNN dispatch is correct, including that the built
   `FCNN_AI2`'s `AutapticLayer`s actually carry the config's `T`/`ai2_variant`/
   `activation_scheme` (not just the right shape — this specific assertion
   was added after mutation testing showed a shape-only check would miss a
   hyperparameter silently getting dropped or swapped).
-- `tests/test_logged_training.py`: exercises `run_and_log` and
-  `replicate_group` against a **real** local sqlite backend pointed at
-  `tmp_path` (not mocked — fast and deterministic, so not the case
-  STYLE.md's "mock boundaries, not logic" guidance is about), via
-  `monkeypatch.setattr` on `logged_training.TRACKING_URI`/
-  `ARTIFACT_LOCATION`, with an autouse fixture draining any dangling active
-  MLflow run between tests. Covers: params/metrics land correctly; y_self
-  absmean metrics present for FCNN, absent for CNN; replicate-group
-  aggregation matches an independently-computed mean/stdev; a mid-sweep
-  failure skips aggregation and leaves the parent run FAILED;
-  `replicate_group(config, 1)` raises before touching MLflow.
-- `tests/test_run_experiments.py`: exercises `_run_config`/`_run_seed`/
-  `_get_replicate_context`/`_draw_seeds` against the same real-sqlite-backend
-  pattern as `test_logged_training.py`, plus monkeypatching
-  `run_experiments.RESULTS_DIR` (to `tmp_path`) per test. Covers:
-  `num_seeds=1` writes one result JSON, a flat (non-nested) MLflow run, and
-  always uses seed `0`; `num_seeds=2`/`3` write one result JSON per seed,
-  produce a nested parent+children MLflow structure with aggregate metrics
-  on the parent, and draw distinct (not sequential `0, 1, 2...`) seeds, each
-  recorded on its child run's `seed` param; `_get_replicate_context`
-  dispatches to `contextlib.nullcontext` vs. a real `replicate_group`
-  context manager correctly; `_run_seed`'s returned `(avg_accuracy,
-  backward_transfer)` matches values independently re-derived from its own
-  written result JSON; a non-`"mnist"` `dataset` suffixes the result
-  filename/MLflow run name and is recorded as the `dataset` param, so it
-  can't collide with the same config's `"mnist"` result.
+- `tests/test_run_store.py`: provenance in a throwaway git repo (clean, modified, staged,
+  untracked, ignored, lab-book-only, rename, subdirectory root, odd file names); dirty tree,
+  blank text and an existing launch directory refuse before anything is created and name the
+  offending paths; lab-book append-only behavior; `verify_unchanged` accepts a lab-book-only
+  commit and rejects source edits/commits; write/read round trip (meta, arrays, `dims`,
+  slices); never overwriting, no `.tmp` after failed writes, stale `.tmp`; corrupt and missing
+  `meta_json`, unknown dataset path. Mutation-checked: removing the dirty check, `os.replace`,
+  the exists check, the lab-book exemption, `exist_ok=False`, the tmp cleanup or the HEAD check
+  each fails a test.
+- `tests/test_recorded_training.py`: array shapes/dims/dtypes, per-neuron flags, CNN without
+  y_self, NaN for unevaluated digits, hooks.
+- `tests/test_logged_training.py`: the MLflow session against a **real** local sqlite backend
+  in `tmp_path` (not mocked -- fast and deterministic, so not the case "mock boundaries, not
+  logic" is about; failures are injected by patching `mlflow` calls, the external boundary).
+  Params/tags (`launch_id`, `run_id`, git commit/branch overriding MLflow's) and metrics; y_self
+  metrics for FCNN only; replicate aggregation; an MLflow error mid-training, at start, at the
+  end or in teardown is recorded, not raised; `cleanup` ends nested runs innermost first as
+  FAILED and a crashed job leaks no active run into the next.
+- `tests/test_experiment_jobs.py`: one job in-process: attributable file content, replicates
+  and their names, existing target never trained over or overwritten, retry skipping finished
+  seeds (also with MLflow aggregation), MLflow failure after training leaves the `.h5` intact,
+  source edit after launch fails the job while a lab-book-only commit does not.
+- `tests/test_run_experiments.py`: planning (seeds drawn once, unique names), refusals before
+  any side effect (blank text, `workers < 1`, dirty tree, bad class split -- the dirty case
+  also checks MLflow was not configured), launches with `workers=1` and `workers=2` producing
+  the same files, MLflow on a fresh database with 2 workers, retry of a job that failed once
+  (also after writing some seeds), a job that always fails reported with the others' files kept,
+  a worker that dies, MLflow errors reported with results kept, same-minute launch refusal,
+  `--no-mlflow` never importing mlflow in the parent or in spawned workers, CLI parsing and exit
+  codes. Spawned workers cannot see the test process's monkeypatches, so failures are injected
+  by picklable stage builders in `tests/fakes.py` steered by environment variables.
+- `tests/test_plotting_utils.py`, `tests/test_plot_size_scan.py`: loading, filtering, grouping
+  with unequal seed counts, ragged stacks, empty selection, each plot function headless
+  (`Agg`), `savefig.*` rcParams respected; scan aggregation, CSV and figures from synthetic runs.
 - `tests/test_size_scan.py`: mirrors `test_sweep.py`'s checks (unique names,
   every config's `build_model` succeeds without raising) plus: size-scan
   names never collide with `sweep.build_configs()`'s own names; hidden
@@ -407,9 +469,8 @@ modules, not implementation code.
   `hidden_sizes_scan`/`channels_scan` raises.
 - `uv run pytest -q` for all of the above.
 - `ruff check` / `ruff format --check` / `ty check` clean.
-- Smoke-run `run_experiments.py` for 2 epochs/stages on all 14 configs (or a
-  subset), confirm no NaNs/crashes, that the accuracy matrix + BWT numbers
-  are produced, and that the MLflow runs show up (`mlflow ui
-  --backend-store-uri sqlite:///mlflow.db`) before committing to
-  full-length runs. Same for `--scan size` and `--dataset fashion_mnist`
-  before committing to full-length runs on either.
+- Smoke-run `run_experiments.py` (a launch needs a clean git tree) for 2 epochs/stages on a
+  few configs, confirm no NaNs/crashes, that the `.h5` files open with `plotting_utils`, and
+  (with MLflow on) that the runs show up (`mlflow ui --backend-store-uri
+  sqlite:///mlflow.db`) before committing to full-length runs. Same for `--scan size` and
+  `--dataset fashion_mnist`, and for `--workers 2`.

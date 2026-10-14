@@ -112,15 +112,32 @@ merge. **Effort:** trivial.
 
 ### 7. Silent result overwrites, duplicate MLflow runs on rerun
 
-**Evidence:** `red-team-main.md` #8; `BUGS.md` #7. **Where:** `_write_results`
+**Status (branch `pipeline-infrastructure`): the overwrite is solved by construction; duplicate MLflow
+runs are not.** Each launch writes to its own `results/{launch_id}/` and `run_store.write_run_file`
+raises on an existing file, so a rerun can never overwrite a result (nothing writes flat
+`results/*.json` any more). The same code attributes every file to a commit, launch and class
+split. **Still open:** every launch (and every retry of a failed job) creates new MLflow runs under
+the same run name; MLflow is a viewer here, so that is by design, but the viewer will show
+duplicates (tag `launch_id`/`run_id` tell them apart).
+
+**Evidence:** `red-team-main.md` #8; `BUGS.md` #7. **Where (original):** `_write_results`
 (`src/run_experiments.py`: line 81 on `main`, 195 on `serious-scan`, 210 on `FCNN-debugging`)
-unconditionally overwrites `results/{name}.json`; `mlflow.start_run` (`src/logged_training.py:53,253`)
+unconditionally overwrote `results/{name}.json`; `mlflow.start_run` (`src/logged_training.py:53,253`)
 adds a new MLflow run under the same name on each rerun, with no warning. **Affects:** all 3 code
-branches. **Recommended fix:** warn (or refuse) on an existing results file unless an explicit
-`--force`/overwrite flag is passed; same for re-running a config name already present in
+branches. **Original recommended fix:** warn (or refuse) on an existing results file; same for
 MLflow. **Effort:** small.
 
 ### 8. `results/` gitignored — reported numbers aren't reproducible from the repo alone
+
+**Status (branch `pipeline-infrastructure`): partly mitigated.** `results/` is still gitignored,
+so the numbers cannot be re-derived from the repo alone. What changed: every run file now records
+the commit (and branch, config, class split, seed, versions) that produced it, refuses to be
+written from a dirty tree, and the launch's `docs/lab-book.md` entry says why it was run, so a
+number is attributable to a code state and can be reproduced by checking that commit out and
+re-running. The 574 pre-pipeline files were imported with `legacy: true`; their commit is
+unknown for the 560 size-scan files (the scan ran on a dirty tree). **Still open:** committing a
+results snapshot (or at least `scan_summary.csv`), and the per-epoch `train_loss`/`y_self`
+histories of the legacy runs exist only in the gitignored `mlflow.db`/`mlartifacts/`.
 
 **Evidence:** `red-team-main.md` #9; `BUGS.md` #8. **Where:** `.gitignore:86` (`/results/`)
 and `:612` (`results/*`), a harmless duplicate, identical on all 3 code branches. Numbers
@@ -228,7 +245,9 @@ enforced nowhere in code; currently harmless because every caller happens to pas
 non-reproducible seeds via `random.SystemRandom()` for `num_seeds > 1` (fixed `[0]` for
 `num_seeds == 1`). Deliberate, per its own docstring, and recorded after the fact (MLflow param
 / results filename / stdout print). No action recommended unless exact pre-run reproducibility
-of multi-seed sweeps becomes a requirement.
+of multi-seed sweeps becomes a requirement. Since `pipeline-infrastructure` the drawn seeds are
+also stored in every run file (`meta["config"]["seed"]`) and are drawn once, in the launching
+process, so a retried job reruns the same seeds.
 
 ## Status: fix landed, not yet everywhere
 

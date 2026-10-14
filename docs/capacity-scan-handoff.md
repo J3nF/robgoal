@@ -2,6 +2,13 @@
 
 Status as of 2026-10-14, branch `serious-scan`. For a future agent/session picking this up.
 
+> **Partly superseded (2026-10-14, branch `pipeline-infrastructure`).** The parts marked
+> *Superseded* below describe the pre-pipeline state: results now live in
+> `results/{launch_id}/*.h5` (see `implementation_doc.md`, "Run provenance and storage"), launches
+> are logged in `docs/lab-book.md`, `--workers N` replaces the throwaway driver scripts, and
+> `plot_size_scan.py` reads the `.h5` files. The 574 old `results/*.json` files were imported
+> into `results/legacy-import/`.
+
 ## What this was
 
 Goal: plot accuracy (and backward_transfer) vs. network size, small enough to overwhelm a
@@ -14,7 +21,7 @@ Goal: plot accuracy (and backward_transfer) vs. network size, small enough to ov
   under-trained-sigmoid-control confound).
 - `src/size_scan.py`: `FCNN_HIDDEN_SIZES_SCAN`/`CNN_CHANNELS_SCAN` extended 5 -> 8 steps, down to
   FCNN `(2, 1)` / CNN `(1, 1)`.
-- `src/plot_size_scan.py` (new): reads `results/*.json`, aggregates mean/std accuracy and
+- `src/plot_size_scan.py` (new; *superseded*: it now reads the `.h5` run files and is a thin script on `plotting_utils.py`): reads `results/*.json`, aggregates mean/std accuracy and
   backward_transfer per config across seeds, writes `results/plots/{accuracy,backward_transfer}
   _vs_size.png` + `scan_summary.csv`. Run with `uv run python src/plot_size_scan.py` after the
   scan finishes.
@@ -23,7 +30,7 @@ Goal: plot accuracy (and backward_transfer) vs. network size, small enough to ov
 - All committed, `ruff check` / `pytest` clean. `ty check` has the same 2 pre-existing failures
   as before this work (TRIAGE.md #3, #11) -- untouched, out of scope.
 
-## Bug found and fixed -- NOT committed, may recur on a fresh clone
+## Bug found and fixed -- NOT committed, may recur on a fresh clone (*mitigated*: the launcher now calls `logged_training.configure` before starting and fails fast on a bad artifact location, and an MLflow error can no longer lose results because the `.h5` is written first)
 
 The local (gitignored) `mlflow.db` had a stale `ai2-mnist` experiment with
 `artifact_location='file:/home/jens/Documents/Repos/robgoal/mlartifacts'` -- a path from a
@@ -40,7 +47,7 @@ installed in this environment) and confirm the path exists and is writable from 
 machine/user. Not written up as a TRIAGE.md entry since it's local state, not a code bug --
 worth doing if this keeps recurring across environments.
 
-## How the actual 560-run scan was executed -- NOT committed, ephemeral
+## How the actual 560-run scan was executed -- NOT committed, ephemeral (*superseded*: `run_experiments.py --workers N` does this, with spawn, one torch thread per worker, one retry and a failure report; MLflow's SQLite busy timeout is 20 s hard-coded, only the connection timeout is widened)
 
 `run_experiments.py --scan size --num-seeds 5` already does this correctly, but sequentially --
 measured ~8.5 min for the largest config's single seed, model-size-dependent (the smallest config
@@ -60,7 +67,7 @@ to be re-run at scale again, recreate an equivalent driver rather than looking f
 they're gone. The underlying reusable logic is all in the committed `src/` modules; only the
 parallel-fan-out wrapper was throwaway.
 
-## Results (local only, gitignored -- not reproducible from git alone)
+## Results (local only, gitignored -- not reproducible from git alone; *superseded layout*: the 560 files were imported to `results/legacy-import/*.h5` with commit unknown, since the scan ran on a dirty tree)
 
 - `results/sizescan_step{0-7}_*_seed*.json` -- 560 files (280 mnist + 280 fashion_mnist), 5 seeds
   each, all from this one scan run.
