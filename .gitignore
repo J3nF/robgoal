@@ -614,6 +614,9 @@ results/*
 # MLflow local tracking (sqlite backend + artifact store), see
 # src/logged_training.py
 /mlflow.db
+/mlflow.db-journal
+/mlflow.db-wal
+/mlflow.db-shm
 /mlartifacts/
 # Safety net: MLflow's own default artifact_location for a NEW experiment is
 # cwd-relative ("./mlruns"), only avoided because logged_training.py sets it

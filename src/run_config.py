@@ -5,7 +5,7 @@ Split out from `run_experiments.py` so `logged_training.py` can depend on
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from autapse import Activation_Scheme, AI2_Variant
 from data import DatasetName
@@ -63,3 +63,30 @@ class RunConfig:
     channels: tuple[int, int] | None = None
     capture_y_self_per_epoch: bool = False
     capture_y_self_per_batch: bool = False
+
+
+def config_from_dict(fields: dict[str, Any]) -> RunConfig:
+    """Rebuilds a `RunConfig` from its JSON form (e.g. a run file's `meta["config"]`).
+
+    JSON turns the tuple fields (`hidden_sizes`, `channels`) into lists; this restores them,
+    since `sweep.build_model` and equality checks expect tuples.
+    """
+    restored: dict[str, Any] = {
+        key: tuple(value) if isinstance(value, list) else value for key, value in fields.items()
+    }
+    return RunConfig(**restored)
+
+
+@dataclass(frozen=True)
+class MlflowSettings:
+    """Where the optional MLflow viewer logs to; carried inside jobs sent to worker processes.
+
+    Attributes:
+        tracking_uri: MLflow tracking backend, e.g. `sqlite:///{repo}/mlflow.db`.
+        artifact_location: Artifact root given to the experiment the one time it is created.
+        experiment_name: MLflow experiment all runs go into.
+    """
+
+    tracking_uri: str
+    artifact_location: str
+    experiment_name: str = "ai2-mnist"

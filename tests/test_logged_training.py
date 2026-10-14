@@ -1,299 +1,282 @@
-"""Tests for logged_training.py against a real local MLflow (sqlite) backend.
+"""Tests for logged_training.py (the optional MLflow viewer) against a real local backend.
 
-Uses the real backend pointed at `tmp_path`, not a mock -- it's fast and
-deterministic (no network), so this isn't the "slow or non-deterministic"
-case STYLE.md's "mock boundaries, not logic" guidance is about.
+Uses a real SQLite backend in `tmp_path`, not a mock: it is fast and deterministic (no
+network), so this is not the "slow or non-deterministic" case that mocking is for. Failures
+are injected by monkeypatching `mlflow` calls, which is the external boundary.
 """
 
 import dataclasses
 import statistics
+from pathlib import Path
 from typing import cast
 
 import mlflow
 import pytest
 import torch
+from fakes import make_cnn_config, make_config, make_stages
 from mlflow.entities import Run
-from torch.utils.data import Dataset, Subset
 
 import logged_training
 import sweep
-from data import Stage
-from metrics import average_accuracy, backward_transfer
-from models import CNN
-from run_config import RunConfig
+from recorded_training import TrainingRecord, train_and_record
+from run_config import MlflowSettings
+from run_store import GitInfo, Launch
+
+COMMIT = "c" * 40
 
 
-class _FakeDataset:
-    """Tiny stand-in dataset for exercising the MLflow adapter without real data.
-
-    Exactly one example per digit 0-9: `average_accuracy`/`backward_transfer`
-    (used by `run_and_log`) require every digit to have an entry in the
-    per-digit accuracy dict, which `evaluate_per_digit_accuracy` only
-    populates for digits actually present in the dataset -- a random sample
-    smaller than 10 examples isn't guaranteed to cover all ten.
-    """
-
-    def __init__(self) -> None:
-        self.x = torch.randn(10, 1, 28, 28)
-        self.targets = torch.arange(10)
-
-    def __len__(self) -> int:
-        return len(self.targets)
-
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
-        return self.x[index], int(self.targets[index].item())
-
-
-def _make_stages(num_stages: int = 2) -> list[Stage]:
-    stages = []
-    for index in range(num_stages):
-        dataset = _FakeDataset()
-        train_subset = Subset(
-            cast(Dataset[tuple[torch.Tensor, int]], dataset), list(range(len(dataset)))
-        )
-        stages.append(
-            Stage(
-                index=index,
-                digits_seen=frozenset(range(index + 1)),
-                train_subset=train_subset,
-                test_data=dataset,
-            )
-        )
-    return stages
-
-
-def _make_config(name: str) -> RunConfig:
-    return RunConfig(
-        name=name,
-        sweep_axis="base",
-        model_kind="fcnn",
-        epochs_per_stage=1,
-        ai2_variant="ai2_diff",
-        activation_scheme="relu_sigmoid",
-        T=2,
-        hidden_sizes=(4, 2),
+@pytest.fixture
+def settings(tmp_path: Path) -> MlflowSettings:
+    return MlflowSettings(
+        tracking_uri=f"sqlite:///{tmp_path / 'test.db'}",
+        artifact_location=f"file:{tmp_path / 'artifacts'}",
     )
 
 
-def _get_run_by_name(name: str) -> Run:
-    runs = mlflow.search_runs(
-        experiment_names=[logged_training.EXPERIMENT_NAME], output_format="list"
-    )
-    matches = [run for run in runs if run.info.run_name == name]
-    assert len(matches) == 1, f"expected exactly one run named {name!r}, found {len(matches)}"
-    return matches[0]
-
-
-def _load_y_self_history(run_id: str, artifact_file: str) -> list[dict]:
-    return mlflow.artifacts.load_dict(f"runs:/{run_id}/{artifact_file}")["records"]
+@pytest.fixture
+def launch(tmp_path: Path) -> Launch:
+    return Launch("2026-10-14-12-30_ccccccc", tmp_path, tmp_path, None, GitInfo(COMMIT, "feature"))
 
 
 @pytest.fixture(autouse=True)
-def _isolated_mlflow(tmp_path, monkeypatch):
-    monkeypatch.setattr(logged_training, "TRACKING_URI", f"sqlite:///{tmp_path / 'test.db'}")
-    monkeypatch.setattr(logged_training, "ARTIFACT_LOCATION", f"file:{tmp_path / 'artifacts'}")
+def _no_leftover_runs():
     yield
     while mlflow.active_run() is not None:
         mlflow.end_run()
 
 
-def test_run_and_log_logs_params_and_metrics() -> None:
-    config = _make_config("test_run")
+def _runs(settings: MlflowSettings) -> list[Run]:
+    runs = mlflow.search_runs(experiment_names=[settings.experiment_name], output_format="list")
+    return cast(list[Run], runs)
+
+
+def _run_named(settings: MlflowSettings, name: str) -> Run:
+    matches = [run for run in _runs(settings) if run.info.run_name == name]
+    assert len(matches) == 1, f"expected exactly one run named {name!r}, found {len(matches)}"
+    return matches[0]
+
+
+def _run_one_seed(session: logged_training.MlflowSession, config, num_stages: int = 2):
+    """What a job does for one seed: begin, train with hooks, log final. Returns the metrics."""
     model = sweep.build_model(config)
-    stages = _make_stages()
+    stages = make_stages(num_stages)
+    hooks = session.begin_run(config, model, stages)
+    record = train_and_record(config, model, stages, torch.device("cpu"), hooks)
+    metrics = {"final_avg_accuracy": 0.5, "final_backward_transfer": -0.25, "train_seconds": 1.0}
+    session.log_final(record, metrics)
+    return record
 
-    logged_training.run_and_log(config, model, stages, torch.device("cpu"))
 
-    run = _get_run_by_name("test_run")
+def test_configure_creates_experiment_with_the_explicit_artifact_location(
+    settings: MlflowSettings,
+) -> None:
+    logged_training.configure(settings)
+    logged_training.configure(settings)
+
+    experiment = mlflow.get_experiment_by_name(settings.experiment_name)
+    assert experiment is not None
+    assert experiment.artifact_location == settings.artifact_location
+
+
+def test_with_busy_timeout_widens_only_the_connection_timeout(settings: MlflowSettings) -> None:
+    widened = logged_training.with_busy_timeout(settings)
+    with_query = logged_training.with_busy_timeout(widened)
+
+    assert widened.tracking_uri == f"{settings.tracking_uri}?timeout=60"
+    assert with_query.tracking_uri == f"{settings.tracking_uri}?timeout=60&timeout=60"
+    assert widened.artifact_location == settings.artifact_location
+
+
+def test_seed_run_logs_params_tags_and_final_metrics(
+    settings: MlflowSettings, launch: Launch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    config = make_config("seed_run", initial_classes=1, classes_per_stage=2)
+
+    _run_one_seed(session, config)
+
+    run = _run_named(settings, "seed_run")
+    assert run.data.params["initial_classes"] == "1"
+    assert run.data.params["classes_per_stage"] == "2"
     assert run.data.params["ai2_variant"] == "ai2_diff"
-    assert run.data.params["T"] == "2"
-    assert run.data.params["initial_classes"] == "5"
-    assert run.data.params["classes_per_stage"] == "1"
-    assert "final_avg_accuracy" in run.data.metrics
-    assert "final_backward_transfer" in run.data.metrics
-
-
-def test_y_self_absmean_present_for_fcnn_absent_for_cnn() -> None:
-    stages = _make_stages(num_stages=1)
-
-    fcnn_config = _make_config("test_fcnn_yself")
-    logged_training.run_and_log(
-        fcnn_config, sweep.build_model(fcnn_config), stages, torch.device("cpu")
-    )
-    fcnn_run = _get_run_by_name("test_fcnn_yself")
-    assert any(key.startswith("y_self_absmean_") for key in fcnn_run.data.metrics)
-
-    cnn_config = dataclasses.replace(
-        fcnn_config,
-        name="test_cnn_yself",
-        model_kind="cnn",
-        ai2_variant=None,
-        activation_scheme=None,
-        T=None,
-        hidden_sizes=None,
-    )
-    logged_training.run_and_log(cnn_config, CNN(), stages, torch.device("cpu"))
-    cnn_run = _get_run_by_name("test_cnn_yself")
-    assert not any(key.startswith("y_self_absmean_") for key in cnn_run.data.metrics)
-
-
-def test_y_self_history_flags_are_independent() -> None:
-    stages = _make_stages(num_stages=1)
-
-    epoch_only = dataclasses.replace(_make_config("test_epoch_only"), capture_y_self_per_epoch=True)
-    logged_training.run_and_log(
-        epoch_only, sweep.build_model(epoch_only), stages, torch.device("cpu")
-    )
-    run = _get_run_by_name("test_epoch_only")
-    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
-    assert len(epoch_history) > 0
-    with pytest.raises(mlflow.exceptions.MlflowException):
-        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_batch.json")
-
-    batch_only = dataclasses.replace(_make_config("test_batch_only"), capture_y_self_per_batch=True)
-    logged_training.run_and_log(
-        batch_only, sweep.build_model(batch_only), stages, torch.device("cpu")
-    )
-    run = _get_run_by_name("test_batch_only")
-    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
-    assert len(batch_history) > 0
-    with pytest.raises(mlflow.exceptions.MlflowException):
-        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_epoch.json")
-
-    neither = _make_config("test_neither")
-    logged_training.run_and_log(neither, sweep.build_model(neither), stages, torch.device("cpu"))
-    run = _get_run_by_name("test_neither")
-    with pytest.raises(mlflow.exceptions.MlflowException):
-        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_epoch.json")
-    with pytest.raises(mlflow.exceptions.MlflowException):
-        mlflow.artifacts.load_dict(f"runs:/{run.info.run_id}/y_self_per_neuron_batch.json")
-
-
-def test_y_self_history_both_flags_produce_distinct_artifacts() -> None:
-    stages = _make_stages(num_stages=1)
-    config = dataclasses.replace(
-        _make_config("test_both"),
-        batch_size=4,
-        capture_y_self_per_epoch=True,
-        capture_y_self_per_batch=True,
-    )
-
-    logged_training.run_and_log(config, sweep.build_model(config), stages, torch.device("cpu"))
-
-    run = _get_run_by_name("test_both")
-    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
-    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
-    assert len(batch_history) > len(epoch_history)
-
-
-def test_y_self_history_accumulation_counts() -> None:
-    stages = _make_stages(num_stages=2)
-    epochs_per_stage = 2
-    config = dataclasses.replace(
-        _make_config("test_counts"),
-        epochs_per_stage=epochs_per_stage,
-        batch_size=4,
-        capture_y_self_per_epoch=True,
-        capture_y_self_per_batch=True,
-    )
-
-    logged_training.run_and_log(config, sweep.build_model(config), stages, torch.device("cpu"))
-
-    run = _get_run_by_name("test_counts")
-    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
-    batch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_batch.json")
-    # _FakeDataset has 10 examples/stage, batch_size=4 -> 3 batches/epoch.
-    assert len(epoch_history) == len(stages) * epochs_per_stage
-    assert len(batch_history) == len(stages) * epochs_per_stage * 3
-    assert [record["step"] for record in epoch_history] == list(range(len(epoch_history)))
-    assert [record["step"] for record in batch_history] == list(range(len(batch_history)))
-    # FCNN config (see _make_config): hidden_sizes=(4, 2) -> AutapticLayers
-    # "hidden_layers.0"/"hidden_layers.1" with 4/2 neurons each. Content
-    # checks catch a wiring bug that always logs {} regardless of model.
-    for record in (*epoch_history, *batch_history):
-        assert record["y_self"].keys() == {"hidden_layers.0", "hidden_layers.1"}
-        assert len(record["y_self"]["hidden_layers.0"]) == 4
-        assert len(record["y_self"]["hidden_layers.1"]) == 2
-
-
-def test_y_self_history_content_free_for_cnn() -> None:
-    stages = _make_stages(num_stages=1)
-    config = dataclasses.replace(
-        _make_config("test_cnn_history"),
-        model_kind="cnn",
-        ai2_variant=None,
-        activation_scheme=None,
-        T=None,
-        hidden_sizes=None,
-        capture_y_self_per_epoch=True,
-    )
-
-    logged_training.run_and_log(config, CNN(), stages, torch.device("cpu"))
-
-    run = _get_run_by_name("test_cnn_history")
-    epoch_history = _load_y_self_history(run.info.run_id, "y_self_per_neuron_epoch.json")
-    assert len(epoch_history) > 0
-    assert all(record["y_self"] == {} for record in epoch_history)
-
-
-def test_replicate_group_rejects_fewer_than_two_seeds() -> None:
-    config = _make_config("test_too_few_seeds")
-
-    with pytest.raises(ValueError, match="num_seeds"), logged_training.replicate_group(config, 1):
-        pass
-
+    assert run.data.tags["launch_id"] == launch.launch_id
+    assert run.data.tags["run_id"] == f"{launch.launch_id}/seed_run"
+    assert run.data.tags["mlflow.source.git.commit"] == COMMIT
+    assert run.data.tags["mlflow.source.git.branch"] == "feature"
+    assert run.data.tags["sweep_axis"] == "base"
+    assert run.data.metrics["final_avg_accuracy"] == 0.5
+    assert run.data.metrics["train_seconds"] == 1.0
+    assert "train_loss" in run.data.metrics
+    assert "avg_accuracy_seen" in run.data.metrics
+    assert run.info.status == "FINISHED"
+    assert session.errors == []
     assert mlflow.active_run() is None
 
 
-def _run_replicates(
-    config: RunConfig, stages: list[Stage], num_seeds: int
-) -> list[tuple[float, float]]:
-    with logged_training.replicate_group(config, num_seeds) as collector:
-        for seed in range(num_seeds):
-            torch.manual_seed(seed)
-            seed_config = dataclasses.replace(config, seed=seed, name=f"{config.name}_seed{seed}")
-            accuracy_by_stage = logged_training.run_and_log(
-                seed_config, sweep.build_model(seed_config), stages, torch.device("cpu")
-            )
-            avg_acc = average_accuracy(accuracy_by_stage[-1], stages[-1].digits_seen)
-            bwt = backward_transfer(accuracy_by_stage, stages[0].digits_seen)
-            collector.append((avg_acc, bwt))
-    return collector
+def test_y_self_absmean_present_for_fcnn_absent_for_cnn(
+    settings: MlflowSettings, launch: Launch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+
+    _run_one_seed(session, make_config("fcnn_run"))
+    _run_one_seed(session, make_cnn_config("cnn_run"))
+
+    fcnn = _run_named(settings, "fcnn_run")
+    cnn = _run_named(settings, "cnn_run")
+    assert any(key.startswith("y_self_absmean_") for key in fcnn.data.metrics)
+    assert not any(key.startswith("y_self_absmean_") for key in cnn.data.metrics)
 
 
-def test_replicate_group_aggregates_correctly() -> None:
-    config = _make_config("test_group")
-    stages = _make_stages()
+def test_accuracy_matrix_is_logged_as_an_artifact(settings: MlflowSettings, launch: Launch) -> None:
+    session = logged_training.MlflowSession(settings, launch)
 
-    collector = _run_replicates(config, stages, num_seeds=3)
+    _run_one_seed(session, make_config("with_matrix"))
 
-    parent_run = _get_run_by_name("test_group")
-    expected_mean_acc = statistics.mean(avg_acc for avg_acc, _ in collector)
-    expected_std_acc = statistics.stdev(avg_acc for avg_acc, _ in collector)
-    assert parent_run.data.metrics["mean_final_avg_accuracy"] == pytest.approx(expected_mean_acc)
-    assert parent_run.data.metrics["std_final_avg_accuracy"] == pytest.approx(expected_std_acc)
+    run = _run_named(settings, "with_matrix")
+    artifacts = mlflow.artifacts.list_artifacts(run_id=run.info.run_id)
+    assert [artifact.path for artifact in artifacts] == ["accuracy_matrix.txt"]
 
 
-def test_replicate_group_partial_failure_skips_aggregation() -> None:
-    config = _make_config("test_failure")
-    stages = _make_stages()
+def test_group_run_nests_children_and_logs_replicate_aggregates(
+    settings: MlflowSettings, launch: Launch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    base = make_config("grouped")
+    session.begin_group(base)
+    for seed in (1, 2):
+        _run_one_seed(session, dataclasses.replace(base, name=f"grouped_seed{seed}", seed=seed))
+    session.end_group([(0.5, -0.1), (0.7, -0.3)])
 
-    with (
-        pytest.raises(RuntimeError, match="simulated"),
-        logged_training.replicate_group(config, 3) as collector,
-    ):
-        for seed in range(3):
-            if seed == 1:
-                raise RuntimeError("simulated training failure")
-            torch.manual_seed(seed)
-            seed_config = dataclasses.replace(config, seed=seed, name=f"{config.name}_seed{seed}")
-            accuracy_by_stage = logged_training.run_and_log(
-                seed_config, sweep.build_model(seed_config), stages, torch.device("cpu")
-            )
-            avg_acc = average_accuracy(accuracy_by_stage[-1], stages[-1].digits_seen)
-            bwt = backward_transfer(accuracy_by_stage, stages[0].digits_seen)
-            collector.append((avg_acc, bwt))
+    parent = _run_named(settings, "grouped")
+    children = [
+        run
+        for run in _runs(settings)
+        if run.data.tags.get("mlflow.parentRunId") == parent.info.run_id
+    ]
+    assert len(children) == 2
+    assert parent.data.metrics["mean_final_avg_accuracy"] == pytest.approx(0.6)
+    assert parent.data.metrics["std_final_avg_accuracy"] == pytest.approx(
+        statistics.stdev([0.5, 0.7])
+    )
+    assert "run_id" not in parent.data.tags
+    assert parent.data.tags["launch_id"] == launch.launch_id
+    assert mlflow.active_run() is None
 
-    parent_run = _get_run_by_name("test_failure")
-    assert "mean_final_avg_accuracy" not in parent_run.data.metrics
-    assert parent_run.info.status == "FAILED"
+
+def test_mlflow_error_during_training_does_not_stop_training_or_lose_the_record(
+    settings: MlflowSettings,
+    launch: Launch,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    calls = []
+
+    def failing_log_metric(*args, **kwargs):
+        calls.append(args)
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(mlflow, "log_metric", failing_log_metric)
+
+    record = _run_one_seed(session, make_config("flaky"), num_stages=3)
+
+    assert len(record.accuracy_by_stage) == 3
+    assert len(calls) == 1  # logging stopped after the first failure
+    assert len(session.errors) == 1
+    assert "database is locked" in session.errors[0]
+    assert "WARNING: MLflow failed" in capsys.readouterr().err
+    assert mlflow.active_run() is None
+
+
+def test_start_run_failure_disables_the_session_and_training_hooks(
+    settings: MlflowSettings, launch: Launch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+
+    def failing_start_run(*args, **kwargs):
+        raise RuntimeError("cannot start")
+
+    monkeypatch.setattr(mlflow, "start_run", failing_start_run)
+    config = make_config("no_start")
+
+    hooks = session.begin_run(config, sweep.build_model(config), make_stages())
+
+    assert hooks is None
+    assert session.errors and "cannot start" in session.errors[0]
+
+
+def test_log_final_failure_is_recorded_and_the_run_is_still_ended(
+    settings: MlflowSettings, launch: Launch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+
+    def failing_log_text(*args, **kwargs):
+        raise OSError("artifact location not writable")
+
+    monkeypatch.setattr(mlflow, "log_text", failing_log_text)
+
+    _run_one_seed(session, make_config("bad_artifacts"))
+
+    assert session.errors and "artifact location" in session.errors[0]
+    assert mlflow.active_run() is None
+    assert _run_named(settings, "bad_artifacts").info.status == "FINISHED"
+
+
+def test_cleanup_after_a_crash_ends_nested_runs_innermost_first_and_marks_them_failed(
+    settings: MlflowSettings, launch: Launch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    base = make_config("crashed")
+    session.begin_group(base)
+    config = dataclasses.replace(base, name="crashed_seed1", seed=1)
+    session.begin_run(config, sweep.build_model(config), make_stages())
+
+    session.cleanup(failed=True)
+
+    assert mlflow.active_run() is None
+    assert _run_named(settings, "crashed").info.status == "FAILED"
+    assert _run_named(settings, "crashed_seed1").info.status == "FAILED"
+
+
+def test_a_crashed_job_does_not_leak_an_active_run_into_the_next_job(
+    settings: MlflowSettings, launch: Launch
+) -> None:
+    crashed = logged_training.MlflowSession(settings, launch)
+    config = make_config("first_job")
+    crashed.begin_run(config, sweep.build_model(config), make_stages())
+    crashed.cleanup(failed=True)
+
+    second = logged_training.MlflowSession(settings, launch)
+    _run_one_seed(second, make_config("second_job"))
+
+    second_run = _run_named(settings, "second_job")
+    assert "mlflow.parentRunId" not in second_run.data.tags
+    assert mlflow.active_run() is None
+
+
+def test_teardown_errors_are_recorded_not_raised(
+    settings: MlflowSettings, launch: Launch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    config = make_config("teardown")
+    session.begin_run(config, sweep.build_model(config), make_stages())
+
+    def failing_end_run(*args, **kwargs):
+        raise RuntimeError("cannot end")
+
+    monkeypatch.setattr(mlflow, "end_run", failing_end_run)
+
+    session.cleanup(failed=True)
+
+    assert session.errors and "cannot end" in session.errors[0]
+
+
+def test_log_final_skips_unset_metrics(settings: MlflowSettings, launch: Launch) -> None:
+    session = logged_training.MlflowSession(settings, launch)
+    config = make_config("record_type")
+    session.begin_run(config, sweep.build_model(config), make_stages())
+
+    session.log_final(TrainingRecord(accuracy_by_stage=[{0: 1.0}]), {"train_seconds": None})
+
+    assert mlflow.active_run() is None
+    assert session.errors == []

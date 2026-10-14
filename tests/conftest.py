@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+import run_store
+
 
 def run_git(repo: Path, *args: str) -> str:
     """Runs git in `repo` with a fixed identity and without the caller's GIT_* variables."""
@@ -45,3 +47,23 @@ def git_repo(tmp_path: Path) -> Path:
     run_git(repo, "add", "-A")
     run_git(repo, "commit", "-q", "-m", "initial")
     return repo
+
+
+@pytest.fixture
+def launch(git_repo: Path, tmp_path: Path):
+    """A started launch in `git_repo` (results under `tmp_path/results`, lab book in the repo)."""
+    return run_store.begin_launch(
+        run_store.LaunchSpec(
+            goal="test goal",
+            method="test method",
+            code_changes="none",
+            command="pytest",
+            scan="sweep",
+            planned_runs=1,
+            dataset="mnist",
+            seeds_mode="single seed 0 per config",
+        ),
+        results_root=tmp_path / "results",
+        lab_book=git_repo / "docs" / "lab-book.md",
+        repo_root=git_repo,
+    )
