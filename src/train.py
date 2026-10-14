@@ -16,7 +16,7 @@ def run_incremental_training(
     device: torch.device,
     *,
     epochs_per_stage: int = 5,
-    lr: float = 1e-3,
+    lr: float = 0.1,
     batch_size: int = 128,
     on_epoch_end: Callable[[int, int, float], None] | None = None,
     on_stage_end: Callable[[int, dict[int, float]], None] | None = None,
