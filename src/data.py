@@ -1,4 +1,4 @@
-"""Cumulative MNIST/FashionMNIST protocol. See lab-book.md, "Class-incremental
+"""Cumulative MNIST/FashionMNIST protocol. See old-lab-book.md, "Class-incremental
 data protocol"."""
 
 import ssl
@@ -25,7 +25,7 @@ def build_stage_digits(
     num_classes: int = 10, initial_classes: int = 5, classes_per_stage: int = 1
 ) -> list[list[int]]:
     """Splits `range(num_classes)` into an initial stage plus one-or-more-classes-at-a-time
-    follow-up stages, see lab-book.md, "Class-incremental data protocol".
+    follow-up stages, see old-lab-book.md, "Class-incremental data protocol".
 
     Defaults reproduce the original hardcoded split (5 initial digits, then
     1 at a time): `[[0,1,2,3,4],[5],[6],[7],[8],[9]]`.
@@ -49,7 +49,7 @@ def build_stage_digits(
 
 
 # Default split: one digit per stage after the initial 5, see
-# `build_stage_digits`'s docstring and lab-book.md, "Class-incremental data
+# `build_stage_digits`'s docstring and old-lab-book.md, "Class-incremental data
 # protocol".
 STAGE_DIGITS: list[list[int]] = build_stage_digits()
 

@@ -39,7 +39,7 @@ aliases exported from the module (`AI2_Variant`, `Activation_Scheme`); see the m
 docstrings for the exact per-variant/scheme formulas — not duplicated here so this
 doc can't drift out of sync with the code again.
 
-The inhibition signal (`y_tilde_prev`, i.e. \tilde y_i(t-1) in lab-book.md
+The inhibition signal (`y_tilde_prev`, i.e. \tilde y_i(t-1) in old-lab-book.md
 notation) starts at `0` regardless of scheme, so `T=1` degenerates to a plain
 `Linear` + activation for both schemes and both variants. Each unroll step
 (`_step`) delegates to `_get_main_output` (the uninhibited activated linear
@@ -58,7 +58,7 @@ read — a plain tensor attribute, not a parameter/buffer, so it's invisible to
   `Linear`, resized to the last `hidden_sizes` entry. `hidden_sizes:
   tuple[int, ...] = (256, 128)` sets the width (and, since it's arbitrary
   length, the depth) of the hidden stack. `T=1` gives the FCNN controls
-  (tests 2–3 in lab-book.md's "Implemented tests").
+  (tests 2–3 in old-lab-book.md's "Implemented tests").
 - `CNN`: control architecture, 2×(conv+ReLU+pool) + FC, no self-inhibition.
   `channels: tuple[int, int] = (16, 32)` sets conv1/conv2's output channel
   counts — the CNN control's equivalent of `FCNN_AI2`'s `hidden_sizes` for
@@ -102,7 +102,7 @@ submodule name (e.g. `"hidden_layers.0"`). Skips layers with no forward pass
 yet and models with no `AutapticLayer`s (e.g. `CNN`) — returns `{}` for
 either, not an error, since both are legitimate call states.
 `logged_training.py`'s `on_epoch_end` calls this every epoch to log
-`y_self_absmean_{layer_name}`; see lab-book.md's wishlist (distributed vs.
+`y_self_absmean_{layer_name}`; see old-lab-book.md's wishlist (distributed vs.
 sparse representations) for why this is worth tracking.
 
 Not a full epoch-weighted average like `train_loss` — it's a snapshot from
@@ -144,7 +144,7 @@ imports this module, not the other way around.
     skipped in the `T` sweep — degenerates to `fcnn_control_relu` regardless
     of variant/scheme, and `relu_sigmoid`+`ai2_diff`+`T=1` is already that
     exact config (documented on `_build_T_sweep`, not `build_configs`, since
-    it's specific to that one sweep). See lab-book.md, "Logging: MLflow",
+    it's specific to that one sweep). See old-lab-book.md, "Logging: MLflow",
     for why one-factor-at-a-time over a full 144-combo grid.
 - `build_model(config: RunConfig) -> nn.Module`: `CNN(channels=config.channels)`
   (or `CNN()` if `channels` is unset) for `model_kind="cnn"`; else asserts
@@ -157,7 +157,7 @@ imports this module, not the other way around.
 
 Same pure config/model-factory shape as `sweep.py`, sibling module (not a
 `sweep.py` function) so `sweep.build_configs()`'s own base tests stay exactly
-what they were. See lab-book.md, "ToDos 2026-08-26 or so".
+what they were. See old-lab-book.md, "ToDos 2026-08-26 or so".
 
 - `FCNN_HIDDEN_SIZES_SCAN`/`CNN_CHANNELS_SCAN`: 8 progressively smaller
   width/channel-count steps for the FCNN and CNN families respectively (same
@@ -218,7 +218,7 @@ Orchestration/IO only: seeding, training, MLflow logging, result reporting —
   (unchanged, deterministic default), else `num_seeds` distinct seeds drawn
   via `random.SystemRandom().randrange` — random *only* once multi-seed
   replication is opted into, so the default single-seed sweep's
-  reproducibility (lab-book.md: "every run sets a fixed seed... reproducible
+  reproducibility (old-lab-book.md: "every run sets a fixed seed... reproducible
   run-to-run") isn't silently lost.
 - `_get_replicate_context(config, num_seeds) -> AbstractContextManager[list[tuple[float, float]] | None]`:
   `logged_training.replicate_group(config, num_seeds)` if `num_seeds > 1`,
@@ -243,7 +243,7 @@ Orchestration/IO only: seeding, training, MLflow logging, result reporting —
 ## Logging: `logged_training.py`
 
 MLflow adapter, manual (not autolog — autolog only covers PyTorch Lightning,
-not this repo's custom training loop; see lab-book.md, "Logging: MLflow").
+not this repo's custom training loop; see old-lab-book.md, "Logging: MLflow").
 
 - **Tracking backend**: `sqlite:///{repo_root}/mlflow.db`. MLflow 3.15 put
   the plain `file:./mlruns` backend into maintenance mode (raises by

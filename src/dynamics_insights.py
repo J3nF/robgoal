@@ -1,4 +1,4 @@
-"""Records autapsic inhibition (y_self) dynamics during training. See lab-book.md."""
+"""Records autapsic inhibition (y_self) dynamics during training. See old-lab-book.md."""
 
 from torch import nn
 

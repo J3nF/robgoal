@@ -1,4 +1,4 @@
-"""Continual-learning evaluation metrics. See lab-book.md, "Evaluation metrics"."""
+"""Continual-learning evaluation metrics. See old-lab-book.md, "Evaluation metrics"."""
 
 from collections import defaultdict
 from typing import cast
@@ -17,7 +17,7 @@ def evaluate_per_digit_accuracy(
     """Computes test accuracy for each of the 10 digits.
 
     Covers both forgetting (already-introduced digits) and generalization
-    (not-yet-introduced ones), see lab-book.md, "Evaluation metrics".
+    (not-yet-introduced ones), see old-lab-book.md, "Evaluation metrics".
     """
     model.eval()
     correct: dict[int, int] = defaultdict(int)
@@ -43,7 +43,7 @@ def backward_transfer(
 ) -> float:
     """Mean accuracy drop on `first_stage_digits` between stage 0 and the final stage.
 
-    The forgetting measure, see lab-book.md, "Evaluation metrics".
+    The forgetting measure, see old-lab-book.md, "Evaluation metrics".
     Precondition: every digit in `first_stage_digits` must have been
     introduced at stage 0 — not checked.
     """
@@ -58,7 +58,7 @@ def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:
     """Renders per-stage, per-digit accuracy as a table (row = stage, col = digit).
 
     A blank cell means a caller passed a partial per-stage accuracy dict;
-    see lab-book.md, "Evaluation metrics".
+    see old-lab-book.md, "Evaluation metrics".
     """
     digits = sorted({digit for stage_accuracy in accuracy_by_stage for digit in stage_accuracy})
     header = "stage | " + " ".join(f"{digit:>5}" for digit in digits)

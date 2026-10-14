@@ -1,4 +1,4 @@
-"""Experiment-run configuration. See lab-book.md, "Logging: MLflow".
+"""Experiment-run configuration. See old-lab-book.md, "Logging: MLflow".
 
 Split out from `run_experiments.py` so `logged_training.py` can depend on
 `RunConfig` without either of those two modules importing each other.

@@ -1,4 +1,4 @@
-"""Stage-wise, epoch-delimited training loop. See lab-book.md, "Experiment design"."""
+"""Stage-wise, epoch-delimited training loop. See old-lab-book.md, "Experiment design"."""
 
 from collections.abc import Callable
 
@@ -24,7 +24,7 @@ def run_incremental_training(
 ) -> list[dict[int, float]]:
     """Trains `model` through the cumulative incremental-digit protocol.
 
-    "Learnt" is epoch-delimited, not loss-delimited, see lab-book.md,
+    "Learnt" is epoch-delimited, not loss-delimited, see old-lab-book.md,
     "Experiment design".
 
     Args:

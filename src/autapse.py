@@ -1,7 +1,7 @@
 """Autaptic self-inhibition layer.
 
 Implementing two activation schemes and two inhibition variants.
-See `lab-book.md` for more details.
+See `old-lab-book.md` for more details.
 """
 
 from collections.abc import Callable
@@ -34,13 +34,13 @@ class AutapticLayer(nn.Module):
         activation_scheme: Which activation drives the main path:
             - "sigmoid": bounded output, inhibition signal is the raw output.
             - "relu_sigmoid": unbounded ReLU output; inhibition signal is
-              `tanh(y / 2)` instead of `sigmoid(y)`, see lab-book.md,
+              `tanh(y / 2)` instead of `sigmoid(y)`, see old-lab-book.md,
               "Activation functions".
 
     Attributes:
         last_y_self: The inhibition signal that fed the *last* unroll step of
             the most recent `forward` call (i.e. `\\tilde y_i(T-1)` in
-            lab-book.md notation) -- the "settled" value the `T`-step unroll
+            old-lab-book.md notation) -- the "settled" value the `T`-step unroll
             exists to produce. `None` until `forward` has run at least once.
             For `T=1`, stays the all-zeros initial value forever (no
             inhibition took place, matching this class's `T=1` degeneracy).
@@ -90,7 +90,7 @@ class AutapticLayer(nn.Module):
 
         "sigmoid": the raw output. "relu_sigmoid": `tanh(y / 2)` instead, so
         the signal stays in `[0, 1[` even though `y` is unbounded ReLU output
-        -- see lab-book.md, "Activation functions".
+        -- see old-lab-book.md, "Activation functions".
         """
         if self.activation_scheme == "sigmoid":
             y_self = y

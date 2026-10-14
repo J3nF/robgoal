@@ -83,8 +83,8 @@ the two affected test functions. **Effort:** trivial (~3 lines).
 
 ### 4. Adam→SGD optimizer choice is circular reasoning
 
-**Evidence:** `red-team-main.md` #3. **Where:** `docs/lab-book.md`, "Optimizers: Adam vs SGD."
-**Recommended fix:** add the already-TODO'd gradient/weight-norm logging (`lab-book.md:177`) or
+**Evidence:** `red-team-main.md` #3. **Where:** `docs/old-lab-book.md`, "Optimizers: Adam vs SGD."
+**Recommended fix:** add the already-TODO'd gradient/weight-norm logging (`old-lab-book.md:177`) or
 a non-`ai2` architectural-change control run at the same `lr`, to check whether
 SGD-sensitivity alone produces a comparable "effect." **Effort:** medium (new control run +
 logging). **Cross-ref:** P2 (same landmine, in the future optimizer-as-config plan).
@@ -98,7 +98,7 @@ discloses the tradeoff ("Option A" over "Option B: Implement memory"), so this i
 bug; the framing docs just keep using persistence-implying language for a mechanism that has
 none. **Recommended fix:** tighten language in `Mini_project_meta_continual_learning.md` and
 the wishlist to describe a per-example fixed-point iteration, not a temporal/dynamical
-mechanism; or implement Option B/D (lab-book/`IDEAS.md`) if real memory is wanted.
+mechanism; or implement Option B/D (old-lab-book.md/`IDEAS.md`) if real memory is wanted.
 **Effort:** small (doc edit) or large (if implementing real state).
 
 ### 6. `CLAUDE.md`/`WRITING_STYLE.md` untracked from git — fixed on `serious-scan`, open elsewhere
@@ -183,7 +183,7 @@ reassignment. **Effort:** small.
 
 Only `torch.manual_seed` is set; `DataLoader` shuffling shares the global RNG, so two configs'
 "all else equal" comparison isn't exact beyond weight init + first epoch. Disclosed in
-`docs/lab-book.md` ("Logging: MLflow"), and flagged "high confidence" in `BUGS.md` #6 on
+`docs/old-lab-book.md` ("Logging: MLflow"), and flagged "high confidence" in `BUGS.md` #6 on
 `FCNN-debugging`, which bundles it with finding #19 below — a distinct, later-introduced issue;
 keep them separate when fixing. **Fix (if pursued):** pass an explicit `torch.Generator` to each
 `DataLoader` instead of relying on global RNG state. **Effort:** small.
@@ -192,7 +192,7 @@ keep them separate when fixing. **Fix (if pursued):** pass an explicit `torch.Ge
 
 **Evidence:** `red-team-main.md` #6; `red-team-FCNN-debugging.md` Cross-check (formula).
 `docs/implementation_doc.md` references a method `_get_main_output` that doesn't exist (real
-helper: `_get_y_activation`). Separately, `docs/lab-book.md`'s table row 6 says
+helper: `_get_y_activation`). Separately, `docs/old-lab-book.md`'s table row 6 says
 $\mathrm{relu}(y_\text{raw} - \tanh(\cdot))$ but the code computes
 $\mathrm{relu}(Wx + b) - \tanh(\cdot)$ (no outer $\mathrm{relu}$), behaviorally equivalent only
 because the output stays $\ge 0$ (`BUGS.md` #3). **Fix:** correct both doc passages to match the
@@ -209,7 +209,7 @@ step, or a clearer error message); (b)/(c) low-priority cleanup. **Effort:** tri
 
 ### 17. Lab-book checkbox granularity mismatch
 
-**Evidence:** `red-team-serious-scan.md` #5. `docs/lab-book.md`'s "Focused experiments" marks
+**Evidence:** `red-team-serious-scan.md` #5. `docs/old-lab-book.md`'s "Focused experiments" marks
 the parent TODO done while its own child bullet ("Epoch size") stays unchecked. **Fix:** split
 into two checkboxes or uncheck the parent. **Effort:** trivial.
 

@@ -1,6 +1,6 @@
 """Tests for FCNN_AI2's configurable hidden_sizes and CNN's configurable channels.
 
-See lab-book.md."""
+See old-lab-book.md."""
 
 from typing import cast
 

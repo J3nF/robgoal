@@ -1,4 +1,4 @@
-"""Tests for run_incremental_training's callback hooks. See lab-book.md."""
+"""Tests for run_incremental_training's callback hooks. See old-lab-book.md."""
 
 from typing import cast
 

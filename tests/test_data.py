@@ -1,4 +1,4 @@
-"""Tests for the incremental-digit MNIST protocol. See lab-book.md."""
+"""Tests for the incremental-digit MNIST protocol. See old-lab-book.md."""
 
 import pytest
 import torch

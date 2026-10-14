@@ -1,5 +1,5 @@
 """Defines the autapsic-inhibition experiment sweep: what configs exist, and
-how to build the model each one describes. See lab-book.md, "Implemented
+how to build the model each one describes. See old-lab-book.md, "Implemented
 tests"."""
 
 from torch import nn

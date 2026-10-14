@@ -1,4 +1,4 @@
-"""Model architectures for the autapsic-inhibition MNIST tests. See lab-book.md."""
+"""Model architectures for the autapsic-inhibition MNIST tests. See old-lab-book.md."""
 
 import torch
 from torch import nn

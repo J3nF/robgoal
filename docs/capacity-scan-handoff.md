@@ -18,7 +18,7 @@ Goal: plot accuracy (and backward_transfer) vs. network size, small enough to ov
   backward_transfer per config across seeds, writes `results/plots/{accuracy,backward_transfer}
   _vs_size.png` + `scan_summary.csv`. Run with `uv run python src/plot_size_scan.py` after the
   scan finishes.
-- `tests/test_size_scan.py`, `docs/lab-book.md`, `docs/implementation_doc.md`, `scan-list.md`:
+- `tests/test_size_scan.py`, `docs/old-lab-book.md`, `docs/implementation_doc.md`, `scan-list.md`:
   updated for the 8-step count / new recipe.
 - All committed, `ruff check` / `pytest` clean. `ty check` has the same 2 pre-existing failures
   as before this work (TRIAGE.md #3, #11) -- untouched, out of scope.

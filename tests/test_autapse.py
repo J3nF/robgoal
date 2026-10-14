@@ -1,4 +1,4 @@
-"""Tests for AutapticLayer. See lab-book.md."""
+"""Tests for AutapticLayer. See old-lab-book.md."""
 
 import pytest
 import torch
@@ -52,7 +52,7 @@ def test_output_never_exceeds_raw_activation(
 
     That combo has no such guarantee: `sigmoid` never clips the difference
     back to non-negative, so `y_tilde_prev` can go negative — the
-    convergence problem lab-book.md's "Activation functions" section
+    convergence problem old-lab-book.md's "Activation functions" section
     discusses, and why `relu_sigmoid` exists.
     """
     layer = AutapticLayer(4, 3, T=5, ai2_variant=ai2_variant, activation_scheme=activation_scheme)

@@ -1,4 +1,4 @@
-"""Tests for size_scan.py's shrinking-network scan. See lab-book.md, "ToDos
+"""Tests for size_scan.py's shrinking-network scan. See old-lab-book.md, "ToDos
 2026-08-26 or so"."""
 
 from typing import cast

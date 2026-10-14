@@ -1,5 +1,5 @@
 """Runs the autapsic-inhibition sweep defined in sweep.py, live-logging to
-MLflow. See lab-book.md, "Implemented tests"."""
+MLflow. See old-lab-book.md, "Implemented tests"."""
 
 import argparse
 import contextlib

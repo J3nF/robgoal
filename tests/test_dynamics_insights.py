@@ -1,4 +1,4 @@
-"""Tests for get_y_self_absmeans and get_y_self_per_neuron. See lab-book.md."""
+"""Tests for get_y_self_absmeans and get_y_self_per_neuron. See old-lab-book.md."""
 
 import torch
 

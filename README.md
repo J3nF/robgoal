@@ -40,7 +40,7 @@ uv sync --extra=cu130
 ## Running experiments
 
 Run the full sweep (autapsic-inhibition variants/schemes, plus a `T` /
-`epochs_per_stage` / hidden-layer-size sweep — see `docs/lab-book.md`,
+`epochs_per_stage` / hidden-layer-size sweep — see `docs/old-lab-book.md`,
 "Implemented tests") from the repo root:
 
 ```sh
@@ -122,7 +122,7 @@ uv run python src/run_experiments.py --scan size --num-seeds 5
   ```
 
 See `docs/implementation_doc.md` for what each module does, and
-`docs/lab-book.md` for the research reasoning behind the sweep design.
+`docs/old-lab-book.md` for the research reasoning behind the sweep design.
 
 ## Tests
 

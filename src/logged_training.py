@@ -1,4 +1,4 @@
-"""MLflow adapter for live experiment tracking. See lab-book.md, "Logging: MLflow"."""
+"""MLflow adapter for live experiment tracking. See old-lab-book.md, "Logging: MLflow"."""
 
 import dataclasses
 import statistics

@@ -1,4 +1,4 @@
-"""Tests for sweep.py's config/model factory. See lab-book.md."""
+"""Tests for sweep.py's config/model factory. See old-lab-book.md."""
 
 from typing import cast
 

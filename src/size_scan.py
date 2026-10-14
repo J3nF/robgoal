@@ -1,5 +1,5 @@
 """Shrinking-network scan: same model families as `sweep.py`, at progressively
-smaller widths. See lab-book.md, "ToDos 2026-08-26 or so" -- ai2 is hypothesized
+smaller widths. See old-lab-book.md, "ToDos 2026-08-26 or so" -- ai2 is hypothesized
 to handle catastrophic interference better than controls once capacity is
 scarce, so this stresses both ai2 and control architectures with less capacity
 to see how that gap changes.
