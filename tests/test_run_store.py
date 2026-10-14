@@ -728,3 +728,25 @@ def test_appending_to_a_lab_book_without_trailing_newline_keeps_entries_separate
     _begin(git_repo, tmp_path)
 
     assert "no newline at end\n\n## " in lab_book.read_text()
+
+
+def test_extra_meta_is_stored_and_cannot_replace_standard_keys(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    launch = _begin(git_repo, tmp_path)
+    config = _config("extra")
+    arrays = {"accuracy": RunArray(np.zeros((1, 10)), ("stage", "digit"))}
+    common = {
+        "config_name": "extra",
+        "metrics": {},
+        "started_at": NOW.isoformat(),
+        "device": "cpu",
+    }
+
+    path = run_store.write_run(
+        launch, config, arrays, extra_meta={"torch_num_threads": 3}, **common
+    )
+    with pytest.raises(ValueError, match="standard meta keys"):
+        run_store.build_meta(launch, config, extra_meta={"device": "gpu"}, **common)
+
+    assert run_store.open_run(path).meta["torch_num_threads"] == 3

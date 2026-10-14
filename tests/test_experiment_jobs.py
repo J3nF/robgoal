@@ -39,8 +39,10 @@ def settings(tmp_path: Path) -> MlflowSettings:
 @pytest.fixture(autouse=True)
 def _no_leftover_runs():
     yield
+    leaked = mlflow.active_run()
     while mlflow.active_run() is not None:
         mlflow.end_run()
+    assert leaked is None, "a test left an MLflow run active"
 
 
 def test_seed_variant_names_keep_the_scheme_unchanged() -> None:
@@ -264,3 +266,19 @@ def test_seeds_are_fixed_by_the_job_not_redrawn_on_rerun(launch: Launch) -> None
     assert outcome.error is None
     seeds = [run.meta["config"]["seed"] for run in run_store.list_runs(launch.directory)]
     assert seeds == [101, 202]
+
+
+def test_interrupted_job_closes_its_mlflow_runs_as_failed_and_propagates(
+    launch: Launch, settings: MlflowSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(experiment_jobs, "train_and_record", interrupted)
+
+    with pytest.raises(KeyboardInterrupt):
+        run_job(_job(launch, seeds=(1, 2), mlflow_settings=settings))
+
+    runs = mlflow.search_runs(experiment_names=["ai2-mnist"], output_format="list")
+    assert {run.info.status for run in runs} == {"FAILED"}
+    assert len(runs) == 2  # the group run and the seed run

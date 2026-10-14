@@ -156,7 +156,12 @@ class NullSession:
 
 
 def init_worker() -> None:
-    """Worker-process initializer: one torch thread, so N workers do not oversubscribe cores."""
+    """Worker-process initializer: one torch thread, so N workers do not oversubscribe cores.
+
+    Single-thread reductions sum in a different order than multi-thread ones, so a parallel
+    launch can differ from a sequential one in the last digits (up to ~1 pp accuracy on real
+    MNIST runs). Every run file therefore records `torch_num_threads`.
+    """
     torch.set_num_threads(1)
 
 
@@ -169,12 +174,16 @@ def run_job(job: Job, skip_existing: bool = False) -> JobOutcome:
     """
     session = _make_session(job)
     error = None
+    interrupted = False
     try:
         _run_job_seeds(job, skip_existing, session)
     except Exception:  # noqa: BLE001 -- any job failure becomes a reported, retried outcome
         error = traceback.format_exc()
+    except BaseException:
+        interrupted = True  # e.g. Ctrl-C: still close MLflow runs as FAILED, then propagate
+        raise
     finally:
-        session.cleanup(failed=error is not None)
+        session.cleanup(failed=error is not None or interrupted)
     return JobOutcome(job.config.name, error, tuple(session.errors))
 
 
@@ -237,6 +246,7 @@ def run_seed(
         metrics=metrics,
         started_at=started_at,
         device=str(device),
+        extra_meta={"torch_num_threads": torch.get_num_threads()},
     )
     session.log_final(record, metrics)
     if job.verbose:

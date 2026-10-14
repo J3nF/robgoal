@@ -498,6 +498,7 @@ def write_run(
     metrics: Mapping[str, float | None],
     started_at: str,
     device: str,
+    extra_meta: Mapping[str, Any] | None = None,
 ) -> Path:
     """Writes `config`'s run file inside `launch`: meta from `config` and provenance, plus `arrays`.
 
@@ -515,6 +516,7 @@ def write_run(
         metrics=metrics,
         started_at=started_at,
         device=device,
+        extra_meta=extra_meta,
     )
     path = launch.run_path(config.name)
     write_run_file(path, meta, arrays)
@@ -529,13 +531,17 @@ def build_meta(
     metrics: Mapping[str, float | None],
     started_at: str,
     device: str,
+    extra_meta: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The `meta_json` content for a run of `config` inside `launch`.
+
+    `extra_meta` adds caller-specific top-level keys (e.g. `torch_num_threads`); it cannot
+    replace the standard ones.
 
     `git.dirty` is always `false`: a launch refuses to start on a dirty tree and
     `Launch.verify_unchanged` re-checks it per job.
     """
-    return {
+    meta = {
         "run_id": launch.run_id(config.name),
         "run_name": config.name,
         "launch_id": launch.launch_id,
@@ -551,6 +557,12 @@ def build_meta(
         "device": device,
         "metrics": dict(metrics),
     }
+    if extra_meta:
+        clashes = sorted(set(extra_meta) & set(meta))
+        if clashes:
+            raise ValueError(f"extra_meta may not replace standard meta keys: {clashes}")
+        meta.update(extra_meta)
+    return meta
 
 
 def _check_run_name(name: str) -> None:

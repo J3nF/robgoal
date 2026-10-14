@@ -41,8 +41,10 @@ def launch(tmp_path: Path) -> Launch:
 @pytest.fixture(autouse=True)
 def _no_leftover_runs():
     yield
+    leaked = mlflow.active_run()
     while mlflow.active_run() is not None:
         mlflow.end_run()
+    assert leaked is None, "a test left an MLflow run active"
 
 
 def _runs(settings: MlflowSettings) -> list[Run]:
@@ -269,6 +271,8 @@ def test_teardown_errors_are_recorded_not_raised(
     session.cleanup(failed=True)
 
     assert session.errors and "cannot end" in session.errors[0]
+    monkeypatch.undo()
+    mlflow.end_run()  # the injected failure left this run open; do not leak it into other tests
 
 
 def test_log_final_skips_unset_metrics(settings: MlflowSettings, launch: Launch) -> None:

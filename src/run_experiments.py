@@ -13,7 +13,7 @@ import multiprocessing
 import random
 import shlex
 import sys
-from concurrent.futures import Future, ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,7 +39,15 @@ from run_store import (
     require_clean_tree,
 )
 
-__all__ = ["LaunchEnv", "LaunchRequest", "main", "run_launch", "run_size_scan"]
+__all__ = [
+    "LaunchEnv",
+    "LaunchRequest",
+    "execute_jobs",
+    "main",
+    "plan_jobs",
+    "run_launch",
+    "run_size_scan",
+]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # Set number of seed replicates per config for variance estimates to default 1.
@@ -120,18 +128,7 @@ def main(
     Raises:
         LaunchError: some job failed twice or MLflow logging failed (results are kept).
     """
-    request = LaunchRequest(
-        goal,
-        method,
-        code_changes,
-        num_seeds,
-        dataset,
-        initial_classes,
-        classes_per_stage,
-        workers,
-        use_mlflow,
-    )
-    request = _with_command(request, command, "main")
+    request = _make_request(locals(), command, "main")
     run_launch(sweep.build_configs(), request, "sweep", env or LaunchEnv())
 
 
@@ -157,18 +154,7 @@ def run_size_scan(
     `size_scan.build_size_scan_configs`) to override the scan's widths;
     `None` (default) uses `size_scan`'s own defaults for both.
     """
-    request = LaunchRequest(
-        goal,
-        method,
-        code_changes,
-        num_seeds,
-        dataset,
-        initial_classes,
-        classes_per_stage,
-        workers,
-        use_mlflow,
-    )
-    request = _with_command(request, command, "run_size_scan")
+    request = _make_request(locals(), command, "run_size_scan")
     configs = size_scan.build_size_scan_configs(
         hidden_sizes_scan if hidden_sizes_scan is not None else size_scan.FCNN_HIDDEN_SIZES_SCAN,
         channels_scan if channels_scan is not None else size_scan.CNN_CHANNELS_SCAN,
@@ -176,16 +162,17 @@ def run_size_scan(
     run_launch(configs, request, "size", env or LaunchEnv())
 
 
-def _with_command(request: LaunchRequest, command: str | None, function: str) -> LaunchRequest:
-    """`request` with the command line to record; a call description if none was given."""
+def _make_request(arguments: dict, command: str | None, function: str) -> LaunchRequest:
+    """The `LaunchRequest` for a `main`/`run_size_scan` call, given that function's `locals()`.
+
+    Without an explicit `command`, the recorded command is a description of the call.
+    """
+    fields = {f.name for f in dataclasses.fields(LaunchRequest)} - {"command"}
+    values = {key: arguments[key] for key in fields}
     if command is None:
-        arguments = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(request).items()
-            if key != "command"
-        )
-        command = f"run_experiments.{function}({arguments})"
-    return dataclasses.replace(request, command=command)
+        call = ", ".join(f"{key}={value!r}" for key, value in sorted(values.items()))
+        command = f"run_experiments.{function}({call})"
+    return LaunchRequest(**values, command=command)
 
 
 def run_launch(configs: list[RunConfig], request: LaunchRequest, scan: str, env: LaunchEnv) -> None:
@@ -202,6 +189,8 @@ def run_launch(configs: list[RunConfig], request: LaunchRequest, scan: str, env:
     """
     if request.workers < 1:
         raise ValueError(f"workers must be >= 1, got {request.workers}")
+    if not configs:
+        raise ValueError("Nothing to run: the config list is empty.")
     plan = plan_jobs(configs, request)
     spec = _make_spec(request, scan, planned_runs=sum(len(seeds) for _, seeds in plan))
     spec.validate()
@@ -320,22 +309,45 @@ def execute_jobs(jobs: list[Job], workers: int) -> list[JobOutcome]:
 
 
 def _run_round(jobs: list[Job], workers: int, skip_existing: bool) -> dict[str, JobOutcome]:
-    """One pass over `jobs`: in-process if `workers == 1`, else on a fresh spawned pool."""
+    """One pass over `jobs`: in-process if `workers == 1`, else on spawned worker processes.
+
+    The first pass shares one pool. The retry pass (`skip_existing`) gives each job its own
+    single-worker pool, `workers` at a time: a worker that dies (OOM kill, segfault) makes the
+    executor fail every unfinished job, so a shared retry pool would let one crasher take all
+    the others down a second time.
+    """
     if workers == 1:
         return {job.config.name: run_job(job, skip_existing) for job in jobs}
-    outcomes: dict[str, JobOutcome] = {}
-    context = multiprocessing.get_context("spawn")
+    max_workers = min(workers, len(jobs))
+    if skip_existing:
+        with ThreadPoolExecutor(max_workers=max_workers) as threads:
+            return _collect({threads.submit(_run_in_own_process, job): job for job in jobs})
     with ProcessPoolExecutor(
-        max_workers=min(workers, len(jobs)), mp_context=context, initializer=init_worker
+        max_workers=max_workers,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=init_worker,
     ) as pool:
-        futures = {pool.submit(run_job, job, skip_existing): job for job in jobs}
-        for done, future in enumerate(as_completed(futures), start=1):
-            job = futures[future]
-            outcome = _outcome_of(future, job)
-            outcomes[job.config.name] = outcome
-            status = "FAILED" if outcome.error else "ok"
-            print(f"[{done}/{len(jobs)}] {job.config.name}: {status}", flush=True)
+        return _collect({pool.submit(run_job, job, False): job for job in jobs})
+
+
+def _collect(futures: dict[Future[JobOutcome], Job]) -> dict[str, JobOutcome]:
+    """Waits for the futures, printing one progress line per finished job."""
+    outcomes: dict[str, JobOutcome] = {}
+    for done, future in enumerate(as_completed(futures), start=1):
+        job = futures[future]
+        outcome = _outcome_of(future, job)
+        outcomes[job.config.name] = outcome
+        status = "FAILED" if outcome.error else "ok"
+        print(f"[{done}/{len(futures)}] {job.config.name}: {status}", flush=True)
     return outcomes
+
+
+def _run_in_own_process(job: Job) -> JobOutcome:
+    """Retries `job` in a fresh single-worker spawned pool, isolated from other jobs."""
+    with ProcessPoolExecutor(
+        max_workers=1, mp_context=multiprocessing.get_context("spawn"), initializer=init_worker
+    ) as pool:
+        return _outcome_of(pool.submit(run_job, job, True), job)
 
 
 def _outcome_of(future: Future[JobOutcome], job: Job) -> JobOutcome:
@@ -435,7 +447,7 @@ def _cli() -> int:
         classes_per_stage=args.classes_per_stage,
         workers=args.workers,
         use_mlflow=not args.no_mlflow,
-        command=shlex.join(sys.argv),
+        command="python " + shlex.join(sys.argv),
     )
     configs = sweep.build_configs() if args.scan == "sweep" else size_scan.build_size_scan_configs()
     try:

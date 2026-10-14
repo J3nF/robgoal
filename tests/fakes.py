@@ -30,7 +30,7 @@ class FakeDataset:
     """
 
     def __init__(self) -> None:
-        self.x = torch.randn(10, 1, 28, 28)
+        self.x = torch.randn(10, 1, 28, 28, generator=torch.Generator().manual_seed(0))
         self.targets = torch.arange(10)
 
     def __len__(self) -> int:
@@ -116,6 +116,24 @@ def die_once_stage_builder(
     marker = Path(os.environ[FAIL_MARKER_ENV])
     if os.getpid() != int(os.environ.get(SKIP_PID_ENV, "-1")) and not marker.exists():
         marker.write_text("died once")
+        os._exit(1)
+    return make_stages()
+
+
+DIE_FOR_INITIAL_CLASSES = 7
+
+
+def die_for_marked_job_stage_builder(
+    dataset: DatasetName, initial_classes: int, classes_per_stage: int
+) -> list[Stage]:
+    """Kills its worker process on every call for a config marked `initial_classes == 7`.
+
+    The marker is how a test makes one specific job a permanent crasher next to healthy ones
+    (a stage builder cannot see the config name). Never kills `$FAKES_SKIP_PID`.
+    """
+    if initial_classes == DIE_FOR_INITIAL_CLASSES and os.getpid() != int(
+        os.environ.get(SKIP_PID_ENV, "-1")
+    ):
         os._exit(1)
     return make_stages()
 

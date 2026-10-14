@@ -4,14 +4,18 @@ import dataclasses
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import mlflow
+import numpy as np
 import pytest
 from fakes import (
+    DIE_FOR_INITIAL_CLASSES,
     FAIL_MARKER_ENV,
     MLFLOW_PROBE_ENV,
     SKIP_PID_ENV,
+    die_for_marked_job_stage_builder,
     die_once_stage_builder,
     fail_once_stage_builder,
     make_broken_config,
@@ -57,8 +61,10 @@ def env(git_repo: Path, tmp_path: Path) -> LaunchEnv:
 @pytest.fixture(autouse=True)
 def _no_leftover_runs():
     yield
+    leaked = mlflow.active_run()
     while mlflow.active_run() is not None:
         mlflow.end_run()
+    assert leaked is None, "a test left an MLflow run active"
 
 
 def _configs() -> list:
@@ -205,7 +211,7 @@ def test_sequential_launch_writes_files_and_a_lab_book_entry(
     assert "Planned runs:** 2" in entry
     assert "Workers:** 1" in entry
     assert "Initial classes / classes per stage:** 1 / 1" in entry
-    assert "MLflow:** off" not in entry  # request.use_mlflow defaults to True
+    assert "MLflow:** on" in entry
     out = capsys.readouterr().out
     assert "stage |" in out  # sequential launches still print the accuracy matrices
 
@@ -347,7 +353,15 @@ def test_mlflow_errors_fail_the_launch_but_keep_every_result(
     assert _h5_names(env) == ["cnn_b.h5", "fcnn_a.h5"]
 
 
-def test_second_launch_in_the_same_minute_on_the_same_commit_is_refused(env: LaunchEnv) -> None:
+def test_second_launch_in_the_same_minute_on_the_same_commit_is_refused(
+    env: LaunchEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 14, 12, 30, 5).astimezone()
+
+    monkeypatch.setattr(run_store, "datetime", FrozenDatetime)
     run_experiments.run_launch(_configs(), _request(use_mlflow=False), "sweep", env)
     entry_after_first = env.lab_book.read_text()
 
@@ -484,6 +498,7 @@ def test_cli_records_the_typed_command_and_maps_outcomes_to_exit_codes(
             LaunchError({}, {"x": ["mlflow down"]}),
             ValueError("bad input"),
             run_store.DirtyTreeError("dirty"),
+            run_store.LaunchExistsError("exists"),
         ]
     )
 
@@ -495,10 +510,10 @@ def test_cli_records_the_typed_command_and_maps_outcomes_to_exit_codes(
 
     monkeypatch.setattr(run_experiments, "run_launch", fake_run_launch)
 
-    codes = [run_experiments._cli() for _ in range(5)]
+    codes = [run_experiments._cli() for _ in range(6)]
 
-    assert codes == [0, 1, 1, 2, 2]
-    assert seen[0].command == "src/run_experiments.py --no-mlflow --goal 'my goal' " + (
+    assert codes == [0, 1, 1, 2, 2, 2]
+    assert seen[0].command == "python src/run_experiments.py --no-mlflow --goal 'my goal' " + (
         "--method m --code-changes c"
     )
     assert seen[0].use_mlflow is False
@@ -527,3 +542,74 @@ def test_retry_round_resumes_a_job_that_crashed_after_writing_some_seeds(
 
     assert _h5_names(env) == ["fcnn_a_seed7.h5", "fcnn_a_seed8.h5", "fcnn_a_seed9.h5"]
     assert len(calls) == 4  # seed 7, crashing seed 8, then seeds 8 and 9 on the retry
+
+
+def test_size_scan_entry_point_honours_width_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    counts = []
+    monkeypatch.setattr(
+        run_experiments,
+        "run_launch",
+        lambda configs, request, scan, env: counts.append(len(configs)),
+    )
+
+    run_experiments.run_size_scan(
+        goal="g",
+        method="m",
+        code_changes="c",
+        hidden_sizes_scan=[(4, 2), (2, 1)],
+        channels_scan=[(2, 4), (1, 1)],
+    )
+
+    assert counts == [14]  # two steps x seven configs
+
+
+def test_empty_config_list_is_refused_before_any_side_effect(env: LaunchEnv) -> None:
+    before = env.lab_book.read_text()
+
+    with pytest.raises(ValueError, match="Nothing to run"):
+        run_experiments.run_launch([], _request(workers=2), "sweep", env)
+
+    _assert_nothing_created(env, before)
+
+
+def test_parallel_and_sequential_launches_give_the_same_numbers_and_record_thread_counts(
+    env: LaunchEnv, tmp_path: Path
+) -> None:
+    sequential = _in_new_root(env, tmp_path, "numbers_seq")
+    parallel = _in_new_root(env, tmp_path, "numbers_par")
+
+    run_experiments.run_launch(_configs(), _request(use_mlflow=False), "sweep", sequential)
+    run_experiments.run_launch(_configs(), _request(use_mlflow=False, workers=2), "sweep", parallel)
+
+    seq_runs = {r.meta["run_name"]: r for r in run_store.list_runs(sequential.results_root)}
+    par_runs = {r.meta["run_name"]: r for r in run_store.list_runs(parallel.results_root)}
+    assert seq_runs.keys() == par_runs.keys()
+    for name, seq in seq_runs.items():
+        for dataset in ("accuracy", "train_loss"):
+            np.testing.assert_allclose(
+                par_runs[name].array(dataset).read(), seq.array(dataset).read(), atol=1e-5
+            )
+        assert par_runs[name].meta["torch_num_threads"] == 1
+        assert seq.meta["torch_num_threads"] >= 1
+
+
+def test_a_permanently_dying_job_does_not_take_the_healthy_jobs_down_with_it(
+    env: LaunchEnv, launch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(SKIP_PID_ENV, str(os.getpid()))
+    crasher = make_config("crasher", initial_classes=DIE_FOR_INITIAL_CLASSES)
+    configs = [crasher] + [
+        make_config(f"good{i}") for i in range(5)
+    ]  # crasher first: queue is lost
+    jobs = [
+        Job(config, (0,), launch, stage_builder=die_for_marked_job_stage_builder, verbose=False)
+        for config in configs
+    ]
+
+    outcomes = {o.name: o for o in run_experiments.execute_jobs(jobs, workers=2)}
+
+    assert outcomes["crasher"].error is not None
+    assert all(outcomes[f"good{i}"].error is None for i in range(5))
+    assert sorted(p.name for p in launch.directory.glob("*.h5")) == [
+        f"good{i}.h5" for i in range(5)
+    ]
