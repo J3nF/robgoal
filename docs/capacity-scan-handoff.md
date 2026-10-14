@@ -41,7 +41,7 @@ mlartifacts' WHERE name = 'ai2-mnist'`); backup at `mlflow.db.bak`.
 
 **This fix lives only in this environment's local `mlflow.db`/`mlflow.db.bak`, both gitignored.**
 A fresh clone (or deleting/regenerating `mlflow.db`) won't carry it. If a scan run silently
-produces zero `results/*.json` files, check for this first: `sqlite3 mlflow.db "SELECT name,
+produces zero result files (this no longer loses `.h5` results, but MLflow errors are reported), check for this first: `sqlite3 mlflow.db "SELECT name,
 artifact_location FROM experiments"` (or the Python `sqlite3` module -- the `sqlite3` CLI isn't
 installed in this environment) and confirm the path exists and is writable from the current
 machine/user. Not written up as a TRIAGE.md entry since it's local state, not a code bug --

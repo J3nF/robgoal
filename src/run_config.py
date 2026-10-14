@@ -28,7 +28,7 @@ class RunConfig:
         dataset: Which dataset this run trains/evaluates on ("mnist" or
             "fashion_mnist"). Logged like any other param so switching
             datasets never silently collides with a same-named run on the
-            other dataset -- see `run_experiments._build_seed_variant`.
+            other dataset -- see `experiment_jobs.build_seed_variant`.
         initial_classes: How many classes stage 0 introduces, see
             `data.build_stage_digits`. Recorded so a 1-class-start run is never
             confused with a 5-class-start run of the same config.
