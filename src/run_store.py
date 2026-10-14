@@ -15,6 +15,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import shlex
 import socket
 import subprocess
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from run_config import RunConfig
 
 __all__ = [
+    "ArrayRef",
     "DirtyTreeError",
     "GitInfo",
     "Launch",
@@ -44,6 +46,7 @@ __all__ = [
     "append_lab_book_entry",
     "begin_launch",
     "build_meta",
+    "get_dirty_paths",
     "get_git_info",
     "list_runs",
     "make_launch_id",
@@ -54,6 +57,9 @@ __all__ = [
 ]
 
 META_DATASET = "meta_json"
+_STRING = h5py.string_dtype()
+_NUMERIC_KINDS = "biufc"  # dtype kinds h5py stores natively: bool, int, uint, float, complex
+_MAX_LISTED_PATHS = 50
 REQUIRED_META_KEYS = ("run_id", "launch_id", "config", "git", "started_at", "metrics")
 LAB_BOOK_HEADER = """# Lab book
 
@@ -202,6 +208,11 @@ class RunArray:
     def __post_init__(self) -> None:
         if len(self.dims) != self.data.ndim:
             raise ValueError(f"dims {self.dims} do not match array of shape {self.data.shape}")
+        if self.data.dtype.kind not in _NUMERIC_KINDS:
+            raise ValueError(
+                f"Cannot store dtype {self.data.dtype}: only bool/int/float/complex arrays are "
+                "supported, and a write failing after training would lose the run."
+            )
 
 
 @dataclass(frozen=True)
@@ -225,6 +236,11 @@ class ArrayRef:
     def read(self) -> np.ndarray:
         """The whole array."""
         return self[()]
+
+    def __len__(self) -> int:
+        return self.shape[0]
+
+    __iter__ = None  # iterating would reopen the file per row; use `read()` or slices
 
     def __array__(self, dtype: Any = None, copy: Any = None) -> np.ndarray:
         data = self.read()
@@ -255,7 +271,7 @@ class RunFile:
             RunFileError: if `dataset` does not exist or is a group; lists what does exist.
         """
         with _open_h5(self.path) as f:
-            node = f.get(dataset)
+            node = f.get(dataset) if dataset != META_DATASET else None
             if not isinstance(node, h5py.Dataset):
                 available = ", ".join(_dataset_paths(f)) or "(none)"
                 raise RunFileError(
@@ -335,7 +351,7 @@ def get_git_info(repo_root: Path) -> GitInfo:
     Read by our own code, not by MLflow, so it is right whatever script launched the run.
     """
     commit = _git(repo_root, "rev-parse", "HEAD").strip()
-    branch = _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD", check=False).strip()
+    branch = _git(repo_root, "branch", "--show-current").strip()
     return GitInfo(commit=commit, branch=branch or "detached")
 
 
@@ -346,14 +362,25 @@ def require_clean_tree(repo_root: Path, lab_book: Path | None = None) -> None:
     `git status --porcelain`. The lab book is exempt because every launch rewrites it.
     Gitignored paths (results, mlflow.db) never count.
     """
-    allowed = _lab_book_relative(repo_root, lab_book)
-    dirty = sorted(path for path in _get_status_paths(repo_root) if path != allowed)
+    dirty = get_dirty_paths(repo_root, lab_book)
     if dirty:
-        listing = "\n".join(f"  - {path}" for path in dirty)
+        listing = "\n".join(f"  - {shlex.quote(path)}" for path in dirty[:_MAX_LISTED_PATHS])
+        if len(dirty) > _MAX_LISTED_PATHS:
+            listing += f"\n  ... and {len(dirty) - _MAX_LISTED_PATHS} more"
         raise DirtyTreeError(
             f"Refusing to run: the git tree at {repo_root} is dirty, so the commit hash would "
             f"not describe the code that runs. Commit or stash these paths first:\n{listing}"
         )
+
+
+def get_dirty_paths(repo_root: Path, lab_book: Path | None = None) -> list[str]:
+    """Sorted paths with uncommitted changes, relative to the git top level, minus the lab book.
+
+    Tracked modifications (staged or not), untracked-but-not-ignored files, and both ends of a
+    rename count. Files marked `assume-unchanged`/`skip-worktree` are invisible to git status.
+    """
+    allowed = _lab_book_relative(repo_root, lab_book)
+    return sorted(path for path in _get_status_paths(repo_root) if path != allowed)
 
 
 def _get_status_paths(repo_root: Path) -> set[str]:
@@ -376,7 +403,7 @@ def _lab_book_relative(repo_root: Path, lab_book: Path | None) -> str | None:
     """`lab_book` relative to the git top level, or `None` if absent or outside the repo."""
     if lab_book is None:
         return None
-    top = Path(_git(repo_root, "rev-parse", "--show-toplevel").strip()).resolve()
+    top = Path(_git(repo_root, "rev-parse", "--show-toplevel").rstrip("\n")).resolve()
     try:
         return Path(lab_book).resolve().relative_to(top).as_posix()
     except ValueError:
@@ -391,6 +418,7 @@ def _git(repo_root: Path, *args: str, check: bool = True) -> str:
         ["git", "--no-optional-locks", "-C", str(repo_root), *args],
         capture_output=True,
         text=True,
+        errors="surrogateescape",
         env=env,
         check=False,
     )
@@ -415,7 +443,8 @@ def append_lab_book_entry(
     lab_book = Path(lab_book)
     lab_book.parent.mkdir(parents=True, exist_ok=True)
     entry = _format_lab_book_entry(launch_id, started, git, spec)
-    prefix = "" if lab_book.exists() else LAB_BOOK_HEADER
+    existing = lab_book.read_text(encoding="utf-8") if lab_book.exists() else None
+    prefix = LAB_BOOK_HEADER if existing is None else ("\n" if not existing.endswith("\n") else "")
     with lab_book.open("a", encoding="utf-8") as f:
         f.write(f"{prefix}\n{entry}")
 
@@ -440,7 +469,8 @@ def _format_lab_book_entry(
     ]
     lines = [f"## {launch_id}", ""]
     lines += [f"- **{label}:** {value}" for label, value in fields if value is not None]
-    lines += ["", "Command:", "", "```sh", spec.command, "```", ""]
+    fence = "`" * max(3, _longest_backtick_run(spec.command) + 1)
+    lines += ["", "Command:", "", f"{fence}sh", spec.command, fence, ""]
     for heading, text in (
         ("Goal", spec.goal),
         ("Method", spec.method),
@@ -450,6 +480,10 @@ def _format_lab_book_entry(
         if text.strip():
             lines += [f"### {heading}", "", text.strip(), ""]
     return "\n".join(lines)
+
+
+def _longest_backtick_run(text: str) -> int:
+    return max((len(run) for run in re.findall(r"`+", text)), default=0)
 
 
 # --- writing --------------------------------------------------------------------------------
@@ -473,6 +507,7 @@ def write_run(
     Raises:
         RunExistsError: the file already exists (never overwritten).
     """
+    _check_run_name(config.name)
     meta = build_meta(
         launch,
         config,
@@ -518,6 +553,14 @@ def build_meta(
     }
 
 
+def _check_run_name(name: str) -> None:
+    if not name or "/" in name or name.startswith("."):
+        raise ValueError(
+            f"Invalid run name {name!r}: it becomes a file name, so it must be non-empty, "
+            "contain no '/' and not start with '.'."
+        )
+
+
 def write_run_file(path: Path, meta: Mapping[str, Any], arrays: Mapping[str, RunArray]) -> None:
     """Atomically creates the run file `path` from `meta` and `arrays`; never overwrites.
 
@@ -540,7 +583,9 @@ def write_run_file(path: Path, meta: Mapping[str, Any], arrays: Mapping[str, Run
     tmp.unlink(missing_ok=True)
     try:
         with h5py.File(tmp, "x") as f:
-            f.create_dataset(META_DATASET, data=json.dumps(meta, indent=2), dtype=_STRING)
+            f.create_dataset(
+                META_DATASET, data=json.dumps(meta, indent=2, default=_json_default), dtype=_STRING
+            )
             for name, array in arrays.items():
                 dataset = f.create_dataset(name, data=array.data)
                 if array.dims:
@@ -552,7 +597,13 @@ def write_run_file(path: Path, meta: Mapping[str, Any], arrays: Mapping[str, Run
         raise
 
 
-_STRING = h5py.string_dtype()
+def _json_default(value: Any) -> Any:
+    """Lets numpy scalars/arrays into `meta_json`, so a stray `np.float32` cannot lose a run."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def _check_meta(meta: Mapping[str, Any]) -> None:
@@ -592,21 +643,35 @@ def open_run(path: Path) -> RunFile:
         RunFileError: the file is missing, not HDF5, or its `meta_json` is absent or corrupt.
     """
     path = Path(path)
-    with _open_h5(path) as f:
-        if META_DATASET not in f:
-            raise RunFileError(
-                f"{path}: no {META_DATASET!r} dataset; this is not a run file written by "
-                "run_store (or it was written incompletely)."
-            )
-        raw = f[META_DATASET].asstr()[()]
-    try:
-        meta = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RunFileError(f"{path}: {META_DATASET!r} is not valid JSON ({exc}).") from exc
+    meta = _read_meta(path)
     missing = [key for key in REQUIRED_META_KEYS if key not in meta]
     if missing:
         raise RunFileError(f"{path}: meta_json lacks required keys {missing}.")
     return RunFile(path, meta)
+
+
+def _read_meta(path: Path) -> dict[str, Any]:
+    """Parses `/meta_json` of `path`; any way of it being absent or corrupt is a `RunFileError`."""
+    try:
+        with _open_h5(path) as f:
+            node = f.get(META_DATASET)
+            if not isinstance(node, h5py.Dataset):
+                raise RunFileError(
+                    f"{path}: no {META_DATASET!r} dataset; this is not a run file written by "
+                    "run_store (or it was written incompletely)."
+                )
+            meta = json.loads(node.asstr()[()])
+    except (OSError, TypeError, AttributeError, ValueError, KeyError) as exc:
+        if isinstance(exc, RunFileError):
+            raise
+        raise RunFileError(
+            f"{path}: {META_DATASET!r} is unreadable or not valid JSON ({exc})."
+        ) from exc
+    if not isinstance(meta, dict):
+        raise RunFileError(
+            f"{path}: {META_DATASET!r} must hold a JSON object, got {type(meta).__name__}."
+        )
+    return meta
 
 
 def list_runs(path: Path) -> list[RunFile]:

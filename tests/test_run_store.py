@@ -68,7 +68,7 @@ def _config(name: str = "cfg") -> RunConfig:
     )
 
 
-def _write(launch: run_store.Launch, name: str = "cfg", arrays=None) -> Path:
+def _write(launch: run_store.Launch, name: str = "cfg", arrays=None, metrics=None) -> Path:
     if arrays is None:
         arrays = {"accuracy": RunArray(np.arange(20.0).reshape(2, 10), ("stage", "digit"))}
     return run_store.write_run(
@@ -76,7 +76,8 @@ def _write(launch: run_store.Launch, name: str = "cfg", arrays=None) -> Path:
         _config(name),
         arrays,
         config_name=name,
-        metrics={"final_avg_accuracy": 0.5, "final_backward_transfer": -0.1, "train_seconds": 1.5},
+        metrics=metrics
+        or {"final_avg_accuracy": 0.5, "final_backward_transfer": -0.1, "train_seconds": 1.5},
         started_at=NOW.isoformat(),
         device="cpu",
     )
@@ -388,7 +389,7 @@ def test_round_trip_preserves_meta_arrays_and_dims(git_repo: Path, tmp_path: Pat
     np.testing.assert_array_equal(np.asarray(batch), per_neuron)
 
 
-def test_partial_slice_reads_only_the_requested_part(git_repo: Path, tmp_path: Path) -> None:
+def test_slicing_an_array_ref_returns_the_requested_part(git_repo: Path, tmp_path: Path) -> None:
     launch = _begin(git_repo, tmp_path)
     data = np.arange(60.0).reshape(6, 10)
     path = _write(launch, arrays={"a": RunArray(data, ("time", "neuron"))})
@@ -411,14 +412,71 @@ def test_existing_target_is_never_overwritten(git_repo: Path, tmp_path: Path) ->
     assert not path.with_name(path.name + ".tmp").exists()
 
 
-def test_failed_write_leaves_neither_tmp_nor_final(git_repo: Path, tmp_path: Path) -> None:
+def test_failure_while_writing_leaves_neither_tmp_nor_final(git_repo: Path, tmp_path: Path) -> None:
     launch = _begin(git_repo, tmp_path)
-    unwritable = {"a": RunArray(np.array([object()]), ("x",))}
 
-    with pytest.raises(TypeError):
-        _write(launch, arrays=unwritable)
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        _write(launch, metrics={"final_avg_accuracy": object()})
 
     assert list(launch.directory.iterdir()) == []
+
+
+def test_numpy_scalars_in_metrics_are_stored_as_plain_numbers(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    launch = _begin(git_repo, tmp_path)
+
+    path = _write(launch, metrics={"final_avg_accuracy": np.float32(0.25), "n": np.int64(3)})
+
+    assert run_store.open_run(path).meta["metrics"] == {"final_avg_accuracy": 0.25, "n": 3}
+
+
+@pytest.mark.parametrize("data", [np.array(["a", "b"]), np.array([object()])])
+def test_run_array_rejects_dtypes_h5py_cannot_store(data: np.ndarray) -> None:
+    with pytest.raises(ValueError, match="Cannot store dtype"):
+        RunArray(data, ("x",))
+
+
+@pytest.mark.parametrize("name", ["", "a/b", ".hidden"])
+def test_invalid_run_names_are_rejected_before_writing(
+    git_repo: Path, tmp_path: Path, name: str
+) -> None:
+    launch = _begin(git_repo, tmp_path)
+
+    with pytest.raises(ValueError, match="Invalid run name"):
+        _write(launch, name=name)
+
+    assert list(launch.directory.iterdir()) == []
+
+
+def test_write_fsyncs_before_publishing(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launch = _begin(git_repo, tmp_path)
+    calls = []
+    monkeypatch.setattr(run_store.os, "fsync", lambda fd: calls.append(fd))
+
+    _write(launch)
+
+    assert len(calls) == 1
+
+
+def test_empty_and_zero_dimensional_arrays_round_trip(git_repo: Path, tmp_path: Path) -> None:
+    launch = _begin(git_repo, tmp_path)
+    path = _write(
+        launch,
+        arrays={
+            "empty": RunArray(np.zeros((0, 3)), ("epoch", "neuron")),
+            "scalar": RunArray(np.array(2.5), ()),
+        },
+    )
+
+    run = run_store.open_run(path)
+
+    assert run.array("empty").shape == (0, 3)
+    assert run.array("empty").dims == ("epoch", "neuron")
+    assert run.array("scalar").dims == ()
+    assert run.array("scalar").read() == 2.5
 
 
 def test_dataset_that_is_also_a_group_prefix_is_rejected(git_repo: Path, tmp_path: Path) -> None:
@@ -553,3 +611,120 @@ def test_list_runs_raises_on_a_corrupt_file_instead_of_skipping(
 def test_list_runs_rejects_missing_directory(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         run_store.list_runs(tmp_path / "nope")
+
+
+def test_meta_json_is_not_exposed_as_an_array(git_repo: Path, tmp_path: Path) -> None:
+    run = run_store.open_run(_write(_begin(git_repo, tmp_path)))
+
+    with pytest.raises(RunFileError, match="no dataset 'meta_json'"):
+        run.array("meta_json")
+
+
+@pytest.mark.parametrize("payload", ["null", "[1, 2]", "42"])
+def test_meta_json_that_is_not_an_object_is_reported(tmp_path: Path, payload: str) -> None:
+    path = tmp_path / "odd.h5"
+    with h5py.File(path, "x") as f:
+        f.create_dataset("meta_json", data=payload, dtype=h5py.string_dtype())
+
+    with pytest.raises(RunFileError, match="JSON object"):
+        run_store.open_run(path)
+
+
+def test_meta_json_of_the_wrong_hdf5_type_is_reported(tmp_path: Path) -> None:
+    path = tmp_path / "odd.h5"
+    with h5py.File(path, "x") as f:
+        f.create_dataset("meta_json", data=np.zeros(3))
+    group_path = tmp_path / "group.h5"
+    with h5py.File(group_path, "x") as f:
+        f.create_group("meta_json")
+
+    with pytest.raises(RunFileError, match="meta_json"):
+        run_store.open_run(path)
+    with pytest.raises(RunFileError, match="meta_json"):
+        run_store.open_run(group_path)
+
+
+def test_array_ref_has_length_but_cannot_be_iterated_by_accident(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    ref = run_store.open_run(_write(_begin(git_repo, tmp_path))).array("accuracy")
+
+    assert len(ref) == 2
+    with pytest.raises(TypeError):
+        iter(ref)
+
+
+def test_branch_name_is_right_when_a_tag_has_the_same_name(git_repo: Path) -> None:
+    run_git(git_repo, "tag", "main")
+
+    assert run_store.get_git_info(git_repo).branch == "main"
+
+
+def test_get_dirty_paths_is_public_and_excludes_the_lab_book(git_repo: Path) -> None:
+    (git_repo / "src" / "a.py").write_text("x = 2\n")
+    (git_repo / "docs" / "lab-book.md").write_text("changed\n")
+
+    assert run_store.get_dirty_paths(git_repo) == ["docs/lab-book.md", "src/a.py"]
+    assert run_store.get_dirty_paths(git_repo, git_repo / "docs" / "lab-book.md") == ["src/a.py"]
+
+
+def test_dirty_listing_is_capped_and_quotes_odd_names(git_repo: Path) -> None:
+    for index in range(60):
+        (git_repo / f"new {index:02d}.txt").write_text("x")
+
+    with pytest.raises(DirtyTreeError) as excinfo:
+        run_store.require_clean_tree(git_repo)
+
+    message = str(excinfo.value)
+    assert "'new 00.txt'" in message
+    assert "... and 10 more" in message
+
+
+def test_paths_with_unicode_and_spaces_are_handled(git_repo: Path) -> None:
+    (git_repo / "sp ace").mkdir()
+    (git_repo / "sp ace" / "ünï.py").write_text("x")
+
+    assert run_store.get_dirty_paths(git_repo) == ["sp ace/ünï.py"]
+
+
+def test_repo_root_may_be_a_subdirectory_of_the_git_toplevel(git_repo: Path) -> None:
+    lab_book = git_repo / "docs" / "lab-book.md"
+    lab_book.write_text("changed\n")
+
+    run_store.require_clean_tree(git_repo / "src", lab_book)
+
+
+def test_default_launch_time_is_local_with_utc_offset(git_repo: Path, tmp_path: Path) -> None:
+    before = datetime.now().astimezone()
+
+    launch = run_store.begin_launch(
+        _spec(),
+        results_root=tmp_path / "results",
+        lab_book=git_repo / "docs" / "lab-book.md",
+        repo_root=git_repo,
+    )
+
+    entry = (git_repo / "docs" / "lab-book.md").read_text()
+    offset = before.strftime("%z")
+    assert f"{offset[:3]}:{offset[3:]}" in entry
+    assert launch.launch_id.startswith(before.strftime("%Y-%m-"))
+
+
+def test_command_with_backticks_cannot_break_out_of_its_fence(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    _begin(git_repo, tmp_path, _spec(command="echo ```danger``` `x`"))
+
+    entry = (git_repo / "docs" / "lab-book.md").read_text()
+    assert "````sh\necho ```danger``` `x`\n````" in entry
+
+
+def test_appending_to_a_lab_book_without_trailing_newline_keeps_entries_separate(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    lab_book = git_repo / "docs" / "lab-book.md"
+    lab_book.write_text("# Lab book\nno newline at end")
+
+    _begin(git_repo, tmp_path)
+
+    assert "no newline at end\n\n## " in lab_book.read_text()
