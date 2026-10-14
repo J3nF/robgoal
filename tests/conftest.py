@@ -4,9 +4,12 @@ import os
 import subprocess
 from pathlib import Path
 
+import matplotlib
 import pytest
 
 import run_store
+
+matplotlib.use("Agg")  # no test may open a window
 
 
 def run_git(repo: Path, *args: str) -> str:
