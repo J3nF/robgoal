@@ -107,6 +107,8 @@ def test_run_and_log_logs_params_and_metrics() -> None:
     run = _get_run_by_name("test_run")
     assert run.data.params["ai2_variant"] == "ai2_diff"
     assert run.data.params["T"] == "2"
+    assert run.data.params["initial_classes"] == "5"
+    assert run.data.params["classes_per_stage"] == "1"
     assert "final_avg_accuracy" in run.data.metrics
     assert "final_backward_transfer" in run.data.metrics
 

@@ -18,7 +18,7 @@ class RunConfig:
     """One sweep entry: a model config plus everything worth logging about it.
 
     Attributes:
-        name: Run name, also used for the results JSON filename.
+        name: Run name, also the stem of the run's `.h5` file in its launch directory.
         sweep_axis: Which dimension this config varies relative to the anchor
             config ("base", "T", "epochs_per_stage", "hidden_sizes"); logged
             as an MLflow tag, not a param.
@@ -29,6 +29,10 @@ class RunConfig:
             "fashion_mnist"). Logged like any other param so switching
             datasets never silently collides with a same-named run on the
             other dataset -- see `run_experiments._build_seed_variant`.
+        initial_classes: How many classes stage 0 introduces, see
+            `data.build_stage_digits`. Recorded so a 1-class-start run is never
+            confused with a 5-class-start run of the same config.
+        classes_per_stage: How many new classes each later stage introduces.
         ai2_variant: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         activation_scheme: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         T: `None` for `model_kind="cnn"`; required for `"fcnn"`.
@@ -47,6 +51,8 @@ class RunConfig:
     model_kind: ModelKind
     epochs_per_stage: int
     dataset: DatasetName = "mnist"
+    initial_classes: int = 5
+    classes_per_stage: int = 1
     seed: int = 0
     lr: float = 0.1
     batch_size: int = 128
