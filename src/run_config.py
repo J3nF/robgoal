@@ -48,7 +48,7 @@ class RunConfig:
     epochs_per_stage: int
     dataset: DatasetName = "mnist"
     seed: int = 0
-    lr: float = 1e-3
+    lr: float = 0.1
     batch_size: int = 128
     ai2_variant: AI2_Variant | None = None
     activation_scheme: Activation_Scheme | None = None
