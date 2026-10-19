@@ -394,7 +394,9 @@ modules, not implementation code.
 
 - `tests/test_autapse.py`: assert `AutapticLayer(..., T=1)` output equals a plain
   `sigmoid(Linear(x))` / `relu(Linear(x))` for both variants × both schemes (degeneracy
-  check); assert gradients flow through `T>1` unrolls (no detached state); assert
+  check); assert `y_self` is detached from the live computation graph on every unroll
+  step -- the inhibition signal is not itself differentiated through; it evolves only
+  implicitly, via the upstream weights that produce it, across training steps -- assert
   `0 <= y <= y_raw` for every variant/scheme combo except `ai2_diff` + `sigmoid`
   (the one combo with no such boundedness guarantee, see the module's docstring).
 - `tests/test_data.py`: assert stage `k`'s train set is the superset of stage

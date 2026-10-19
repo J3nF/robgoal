@@ -26,6 +26,11 @@ are now written up in `red-team-main.md` (#8, #9, #10 and #7), were listed earli
 `FCNN-debugging`'s `BUGS.md` (#7-#10), and are confirmed in the Cross-check of
 `red-team-FCNN-debugging.md`. Line numbers below are given per branch where they differ.
 
+Entries (or parts of entries) tagged `[discussion-2026-10-18]` come from a direct conversation
+with the researcher about whether this document's own point 1 undersells how the project's
+intent maps onto the implementation. They are not in any of the four red-team reports and were
+not produced by a red-team pass; the tag dates them and marks the distinct source.
+
 ---
 
 ## Critical
@@ -50,6 +55,19 @@ against `ai2_variant="ai2_diff"` + `activation_scheme="sigmoid"` at even `T`; (b
 it's a guaranteed duplicate of the control at the only `T` it actually runs at, per `IDEAS.md`
 §3's own follow-up #4 — that follow-up only mentions the single `sweep.py` instance; extend it
 to `size_scan.py`. **Effort:** small (a guard clause + deleting redundant configs).
+
+**Addendum `[discussion-2026-10-18]` — doc now asserts the opposite of what code/tests implement.**
+`docs/implementation_doc.md:397-399` was edited to state that `y_self` is detached from the
+live computation graph (self-inhibition evolves only implicitly, via upstream weight updates,
+not via direct gradient flow) — a project-intent decision, not a report of a bug. **Where:**
+`AutapticLayer.forward` (`src/autapse.py:69-77`) and `tests/test_autapse.py:26-37`'s
+`test_gradients_flow_through_unroll` both still implement and assert full, non-detached
+gradient flow through the `T>1` unroll — the doc edit was not matched by a code or test change.
+**Recommended fix:** decide which is correct, then make all three agree: either detach
+`y_self` inside the `forward()` loop (not just the already-detached `last_y_self` logging
+copy, `src/autapse.py:76`) and rewrite `test_gradients_flow_through_unroll` to assert the
+opposite, or revert the doc edit. **Effort:** small once decided (one `.detach()` call + one
+test rewrite, or a one-line doc revert).
 
 ### 2. The data protocol structurally suppresses the forgetting signal it's meant to measure
 
@@ -101,6 +119,18 @@ the wishlist to describe a per-example fixed-point iteration, not a temporal/dyn
 mechanism; or implement Option B/D (old-lab-book.md/`IDEAS.md`) if real memory is wanted.
 **Effort:** small (doc edit) or large (if implementing real state).
 
+**Addendum `[discussion-2026-10-18]` — the project's own justification for the mechanism needs
+exactly the persistence this finding says is missing.** The researcher's stated argument for
+why learning should spread detection across neurons: a neuron's self-inhibition compounds
+"over multiple steps," so compensating by strengthening its own weights doesn't reliably work.
+Read as persistence across training exposures (not just within one example's `T`-step unroll),
+that needs a neuron's inhibition to carry information about its activity on *earlier, different*
+examples — Option B ("implement memory") in `old-lab-book.md:51`. The shipped mechanism (Option
+A) resets `y_self` to zero at the start of every `forward()` call (`src/autapse.py:71`), so no
+such cross-example history exists. If "multiple steps" was meant this way, the project's own
+justification for the mechanism currently has no implementation backing it, independent of
+finding #21's gradient-flow question.
+
 ### 6. `CLAUDE.md`/`WRITING_STYLE.md` untracked from git — fixed on `serious-scan`, open elsewhere
 
 **Evidence:** `red-team-serious-scan.md` #3. **Where:** commits `d1586fc`/`57ef9df`,
@@ -145,6 +175,41 @@ quoted in the lab book / `FCNN-debugging/BUGS.md` can't be checked against the r
 re-running the sweep. **Recommended action:** either commit a representative results snapshot,
 or make the lab book explicit that quoted numbers are not re-derivable from the repo as-is.
 **Effort:** small (process decision, not code).
+
+### 21. Full backprop through the self-inhibition recursion isn't motivated by the project's own
+justification for the mechanism `[discussion-2026-10-18]`
+
+**Evidence:** conversation with the researcher, 2026-10-18 — not in any of the four red-team
+reports. **Where:** the live (non-detached) `y_self` inside `AutapticLayer.forward`'s `T>1`
+unroll (`src/autapse.py:69-77`), locked in by `tests/test_autapse.py:26-37`
+(`test_gradients_flow_through_unroll`) and, until finding #1's addendum edited it, by
+`docs/implementation_doc.md:397`.
+
+The researcher's own justification for the mechanism: a neuron that over-relies on itself gets
+throttled by its own inhibition; trying to compensate by strengthening its weights doesn't
+reliably work, because the inhibition compounds against exactly that; so learning has to
+recruit other neurons instead. That argument only needs an over-active neuron's *forward*
+output to be suppressed, which already throttles its own gradient through the surviving,
+non-recursive path — e.g. `ai2_gate`'s `d(y_tilde)/dW = (1 - y_self) * dy/dW` holds even if
+`y_self` is a frozen constant at that point. It does not need gradients to flow through
+`y_self`'s own origin — the recursive "how would changing my weights change my own future
+self-inhibition" term — yet that is exactly what the current `forward()` computes and what
+`test_gradients_flow_through_unroll` asserts must keep happening. That recursive term shapes a
+neuron's weights by how they affect its own inhibition dynamics specifically, which is broader
+than, and not derived from, the "spread detection across neurons" argument the project actually
+makes.
+
+**Recommended fix:** either record an independent justification for differentiating through the
+recursion (none is currently written down), or treat this as confirming that detaching `y_self`
+inside the live unroll (not just the already-detached `last_y_self` logging copy,
+`src/autapse.py:76`) is the version that matches the stated intent, and update
+`test_gradients_flow_through_unroll` to assert the opposite. Cross-ref finding #1's addendum
+(already points this direction) and finding #5 (persistence framing; its own addendum above is
+the sharper version of this same gap). **Effort:** small once decided — one `.detach()` call
+plus one test rewrite, same shape as finding #1's addendum. **Severity:** Medium (academic/
+mapping gap — doesn't currently produce wrong results, since the extra recursive term is
+additional signal rather than corruption, but the shipped mechanism does something broader than
+the project's own stated argument for why it should work, and that gap is undocumented).
 
 ## Needs further testing (investigated, not confirmed either way)
 
@@ -344,6 +409,7 @@ that historical results become incomparable.
 | 18 | `backward_transfer` unchecked precondition | Low | implementation | main | all 3 code branches |
 | 19 | Multi-seed `SystemRandom` draws aren't reproducible ahead of time | By design | — | serious-scan | serious-scan, FCNN-debugging |
 | 20 | `lr` fix landed on `FCNN-debugging` only, not merged elsewhere | Status | — | FCNN-debugging | — |
+| 21 | Full BPTT through the self-inhibition recursion isn't motivated by the project's own argument `[discussion-2026-10-18]` | Medium | academic | discussion w/ researcher | all 3 code branches |
 | P1 | Plan: Option C breaks `REPO_ROOT` anchoring | High-if-executed | plan risk | IDEAS.md §1 (`python-modularisation` report) | — |
 | P2 | Plan: Option G reopens the Adam/SGD risk (cross-ref #4) | Medium-if-executed | plan risk | ″ | — |
 | P3 | Plan: Option H undersold, dropped from suggested order | Medium (planning gap + missed opportunity) | plan risk | ″ | — |
