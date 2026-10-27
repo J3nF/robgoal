@@ -31,7 +31,7 @@ def _write_run(launch: Launch, name: str, config_name: str, accuracy=None, loss=
     cfg = dataclasses.replace(make_config(name), **config)
     arrays = {
         "accuracy": RunArray(
-            np.full((2, 10), 0.5) if accuracy is None else accuracy, ("stage", "digit")
+            np.full((2, 10), 0.5) if accuracy is None else accuracy, ("epoch", "digit")
         ),
         "train_loss": RunArray(np.array([1.0, 0.5, 0.25]) if loss is None else loss, ("epoch",)),
     }
@@ -206,7 +206,7 @@ def test_accuracy_heatmap_for_one_run_and_the_seed_mean() -> None:
         assert isinstance(ax, Axes)
         assert np.asarray(ax.images[0].get_array()).shape == (6, 10)
         assert ax.images[0].get_clim() == (0.0, 1.0)
-    with pytest.raises(ValueError, match="stages, digits"):
+    with pytest.raises(ValueError, match="epochs, digits"):
         pu.plot_accuracy_heatmap(np.zeros(5))
 
 

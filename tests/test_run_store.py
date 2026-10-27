@@ -70,7 +70,7 @@ def _config(name: str = "cfg") -> RunConfig:
 
 def _write(launch: run_store.Launch, name: str = "cfg", arrays=None, metrics=None) -> Path:
     if arrays is None:
-        arrays = {"accuracy": RunArray(np.arange(20.0).reshape(2, 10), ("stage", "digit"))}
+        arrays = {"accuracy": RunArray(np.arange(20.0).reshape(2, 10), ("epoch", "digit"))}
     return run_store.write_run(
         launch,
         _config(name),
@@ -349,7 +349,7 @@ def test_round_trip_preserves_meta_arrays_and_dims(git_repo: Path, tmp_path: Pat
     path = _write(
         launch,
         arrays={
-            "accuracy": RunArray(accuracy, ("stage", "digit")),
+            "accuracy": RunArray(accuracy, ("epoch", "digit")),
             "train_loss": RunArray(loss, ("epoch",)),
             "y_self_per_neuron_batch/hidden_layers.0": RunArray(per_neuron, ("batch", "neuron")),
         },
@@ -381,7 +381,7 @@ def test_round_trip_preserves_meta_arrays_and_dims(git_repo: Path, tmp_path: Pat
         "y_self_per_neuron_batch/hidden_layers.0",
     ]
     ref = run.array("accuracy")
-    assert (ref.shape, ref.dims, ref.dtype) == ((2, 10), ("stage", "digit"), np.float64)
+    assert (ref.shape, ref.dims, ref.dtype) == ((2, 10), ("epoch", "digit"), np.float64)
     np.testing.assert_array_equal(ref.read(), accuracy)
     np.testing.assert_array_equal(run.array("train_loss").read(), loss)
     batch = run.array("y_self_per_neuron_batch/hidden_layers.0")
@@ -735,7 +735,7 @@ def test_extra_meta_is_stored_and_cannot_replace_standard_keys(
 ) -> None:
     launch = _begin(git_repo, tmp_path)
     config = _config("extra")
-    arrays = {"accuracy": RunArray(np.zeros((1, 10)), ("stage", "digit"))}
+    arrays = {"accuracy": RunArray(np.zeros((1, 10)), ("epoch", "digit"))}
     common = {
         "config_name": "extra",
         "metrics": {},

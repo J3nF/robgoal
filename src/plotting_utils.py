@@ -201,22 +201,22 @@ def plot_accuracy_heatmap(
     figsize: tuple[float, float] | None = None,
     cmap: str = "viridis",
 ) -> Axes:
-    """Heatmap of the (stage, digit) accuracy matrix of one run, or the seed mean.
+    """Heatmap of the (epoch, digit) accuracy matrix of one run, or the seed mean.
 
     Args:
-        accuracy: Shape (stages, digits), or (seeds, stages, digits) which is averaged over
+        accuracy: Shape (epochs, digits), or (seeds, epochs, digits) which is averaged over
             seeds first. Colors span [0, 1].
     """
     accuracy = np.asarray(accuracy)
     if accuracy.ndim == 3:
         accuracy = accuracy.mean(axis=0)
     if accuracy.ndim != 2:
-        raise ValueError(f"accuracy must be (stages, digits) or (seeds, ...), got {accuracy.shape}")
+        raise ValueError(f"accuracy must be (epochs, digits) or (seeds, ...), got {accuracy.shape}")
     ax = _get_axes(ax, figsize)
     image = ax.imshow(accuracy, aspect="auto", cmap=cmap, vmin=0.0, vmax=1.0)
     ax.figure.colorbar(image, ax=ax, label="accuracy")
     ax.set_xlabel("digit")
-    ax.set_ylabel("stage")
+    ax.set_ylabel("epoch")
     ax.set_xticks(range(accuracy.shape[1]))
     ax.set_yticks(range(accuracy.shape[0]))
     return ax

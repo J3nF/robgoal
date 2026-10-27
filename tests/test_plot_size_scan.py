@@ -31,7 +31,7 @@ def _write_scan_run(
     run_store.write_run(
         launch,
         dataclasses.replace(config, **fields),
-        {"accuracy": RunArray(np.zeros((2, 10)), ("stage", "digit"))},
+        {"accuracy": RunArray(np.zeros((2, 10)), ("epoch", "digit"))},
         config_name=config.name,
         metrics={
             "final_avg_accuracy": accuracy,

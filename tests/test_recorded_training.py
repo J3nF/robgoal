@@ -7,7 +7,9 @@ import torch
 from fakes import make_cnn_config, make_config, make_stages
 
 import sweep
+from dynamics_insights import get_y_self_absmeans
 from recorded_training import NUM_DIGITS, TrainingHooks, build_arrays, train_and_record
+from train import run_incremental_training
 
 CPU = torch.device("cpu")
 
@@ -33,8 +35,8 @@ def test_arrays_have_documented_shapes_dims_and_dtypes() -> None:
 
     arrays = build_arrays(record)
 
-    assert arrays["accuracy"].dims == ("stage", "digit")
-    assert arrays["accuracy"].data.shape == (3, NUM_DIGITS)
+    assert arrays["accuracy"].dims == ("epoch", "digit")
+    assert arrays["accuracy"].data.shape == (6, NUM_DIGITS)
     assert arrays["accuracy"].data.dtype == np.float64
     assert arrays["train_loss"].dims == ("epoch",)
     assert arrays["train_loss"].data.shape == (6,)
@@ -47,18 +49,49 @@ def test_arrays_have_documented_shapes_dims_and_dtypes() -> None:
 
 
 def test_accuracy_matrix_matches_the_per_digit_dicts() -> None:
-    record, _ = _train(make_config("rec"), num_stages=2)
+    record, _ = _train(make_config("rec", epochs_per_stage=2), num_stages=2)
 
     accuracy = build_arrays(record)["accuracy"].data
 
-    for stage_index, per_digit in enumerate(record.accuracy_by_stage):
+    for epoch_index, per_digit in enumerate(record.accuracy_by_epoch):
         for digit, value in per_digit.items():
-            assert accuracy[stage_index, digit] == value
+            assert accuracy[epoch_index, digit] == value
 
 
-def test_digits_missing_from_a_stage_are_nan() -> None:
+def test_last_epoch_of_each_stage_equals_the_stage_accuracy() -> None:
+    record, _ = _train(make_config("rec", epochs_per_stage=3), num_stages=2)
+
+    assert len(record.accuracy_by_epoch) == 6
+    for stage_index, per_digit in enumerate(record.accuracy_by_stage):
+        assert record.accuracy_by_epoch[(stage_index + 1) * 3 - 1] == per_digit
+
+
+def test_per_epoch_evaluation_leaves_training_and_recorded_y_self_unchanged() -> None:
+    config = make_config("rec", epochs_per_stage=2, T=3)
+    stages = make_stages(2)
+
+    torch.manual_seed(0)
+    model = sweep.build_model(config)
+    losses, y_self = [], []
+
+    def on_epoch_end(stage: int, epoch: int, loss: float) -> None:
+        losses.append(loss)
+        y_self.append(get_y_self_absmeans(model))
+
+    run_incremental_training(model, stages, CPU, epochs_per_stage=2, on_epoch_end=on_epoch_end)
+    torch.manual_seed(0)
+    record, _ = _train(config, num_stages=2)
+
+    assert record.train_loss == losses
+    assert [
+        {name: values[epoch] for name, values in record.y_self_absmean.items()}
+        for epoch in range(4)
+    ] == y_self
+
+
+def test_digits_missing_from_an_epoch_are_nan() -> None:
     record, _ = _train(make_config("rec"), num_stages=1)
-    record.accuracy_by_stage[0] = {0: 1.0, 1: 0.5}
+    record.accuracy_by_epoch[0] = {0: 1.0, 1: 0.5}
 
     accuracy = build_arrays(record)["accuracy"].data
 

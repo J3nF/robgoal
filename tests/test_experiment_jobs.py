@@ -282,3 +282,15 @@ def test_interrupted_job_closes_its_mlflow_runs_as_failed_and_propagates(
     runs = mlflow.search_runs(experiment_names=["ai2-mnist"], output_format="list")
     assert {run.info.status for run in runs} == {"FAILED"}
     assert len(runs) == 2  # the group run and the seed run
+
+
+def test_fcnn_job_stores_the_unroll_trace_but_the_cnn_job_does_not(launch: Launch) -> None:
+    run_job(_job(launch, make_config("fcnn_job")))
+    run_job(_job(launch, make_cnn_config("cnn_job")))
+
+    fcnn_run, cnn_run = sorted(run_store.list_runs(launch.directory), key=lambda r: r.path.name)[
+        ::-1
+    ]
+    assert fcnn_run.array("unroll/mean_y_tilde").shape == (2, 10, 2)
+    assert fcnn_run.array("unroll/mean_y_tilde").dims == ("layer", "class", "step")
+    assert not any(path.startswith("unroll/") for path in cnn_run.dataset_paths())

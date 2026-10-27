@@ -14,8 +14,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from data import Stage
+from data import LabeledDataset, Stage
 from dynamics_insights import get_y_self_absmeans, get_y_self_per_neuron
+from metrics import evaluate_per_digit_accuracy
 from run_config import RunConfig
 from run_store import RunArray
 from train import run_incremental_training
@@ -46,7 +47,9 @@ class TrainingRecord:
     """Everything one training run produced.
 
     Attributes:
-        accuracy_by_stage: One per-digit accuracy dict per stage.
+        accuracy_by_stage: One per-digit accuracy dict per stage, evaluated after its last epoch.
+        accuracy_by_epoch: One per-digit accuracy dict per epoch, indexed by global epoch like
+            `train_loss`; the last epoch of each stage equals that stage's `accuracy_by_stage`.
         train_loss: Mean loss per epoch, indexed by global epoch
             (`stage_index * epochs_per_stage + epoch_index`).
         y_self_absmean: Per AutapticLayer name, mean |y_self| after each epoch.
@@ -58,6 +61,7 @@ class TrainingRecord:
     """
 
     accuracy_by_stage: list[dict[int, float]] = field(default_factory=list)
+    accuracy_by_epoch: list[dict[int, float]] = field(default_factory=list)
     train_loss: list[float] = field(default_factory=list)
     y_self_absmean: dict[str, list[float]] = field(default_factory=dict)
     y_self_per_neuron_epoch: dict[str, list[list[float]]] = field(default_factory=dict)
@@ -92,8 +96,11 @@ def train_and_record(
         lr=config.lr,
         batch_size=config.batch_size,
         on_epoch_end=_chain_epoch(
-            _make_epoch_recorder(model, record, config.capture_y_self_per_epoch),
-            hooks.on_epoch_end,
+            _chain_epoch(
+                _make_epoch_recorder(model, record, config.capture_y_self_per_epoch),
+                hooks.on_epoch_end,
+            ),
+            _make_epoch_evaluator(model, record, stages[0].test_data, device),
         ),
         on_stage_end=_chain_stage(_make_stage_recorder(record), hooks.on_stage_end),
         on_batch_end=on_batch_end,
@@ -105,11 +112,11 @@ def train_and_record(
 def build_arrays(record: TrainingRecord) -> dict[str, RunArray]:
     """The datasets a run file stores for `record`, keyed by dataset path.
 
-    `accuracy` is (stage, digit) with NaN for digits a stage did not evaluate; the per-layer
+    `accuracy` is (epoch, digit), evaluated on the full test set after every epoch; the per-layer
     datasets exist only for models with AutapticLayers (the CNN has none).
     """
     arrays = {
-        "accuracy": RunArray(_to_accuracy_matrix(record.accuracy_by_stage), ("stage", "digit")),
+        "accuracy": RunArray(_to_accuracy_matrix(record.accuracy_by_epoch), ("epoch", "digit")),
         "train_loss": RunArray(np.asarray(record.train_loss, dtype=np.float64), ("epoch",)),
     }
     for layer, values in record.y_self_absmean.items():
@@ -127,11 +134,11 @@ def build_arrays(record: TrainingRecord) -> dict[str, RunArray]:
     return arrays
 
 
-def _to_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> np.ndarray:
-    matrix = np.full((len(accuracy_by_stage), NUM_DIGITS), np.nan, dtype=np.float64)
-    for stage_index, per_digit in enumerate(accuracy_by_stage):
+def _to_accuracy_matrix(accuracy_by_epoch: list[dict[int, float]]) -> np.ndarray:
+    matrix = np.full((len(accuracy_by_epoch), NUM_DIGITS), np.nan, dtype=np.float64)
+    for epoch_index, per_digit in enumerate(accuracy_by_epoch):
         for digit, accuracy in per_digit.items():
-            matrix[stage_index, digit] = accuracy
+            matrix[epoch_index, digit] = accuracy
     return matrix
 
 
@@ -151,6 +158,25 @@ def _make_epoch_recorder(
             record.y_self_absmean.setdefault(layer, []).append(absmean)
         if capture_per_neuron:
             _append_rows(record.y_self_per_neuron_epoch, get_y_self_per_neuron(model))
+
+    return on_epoch_end
+
+
+def _make_epoch_evaluator(
+    model: nn.Module, record: TrainingRecord, test_data: LabeledDataset, device: torch.device
+) -> EpochCallback:
+    """Callback appending the per-digit test accuracy to `record` (mutates it) after each epoch.
+
+    Chained after every other epoch callback: evaluating runs the model, which overwrites
+    `AutapticLayer.last_y_self` that those callbacks read.
+    The CPU RNG is forked because the evaluation `DataLoader` draws from the global RNG,
+    which would change the shuffling of every later training epoch.
+    """
+
+    def on_epoch_end(stage_index: int, epoch_index: int, avg_loss: float) -> None:
+        del stage_index, epoch_index, avg_loss
+        with torch.random.fork_rng(devices=[]):
+            record.accuracy_by_epoch.append(evaluate_per_digit_accuracy(model, test_data, device))
 
     return on_epoch_end
 

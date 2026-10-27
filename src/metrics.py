@@ -3,6 +3,7 @@
 from collections import defaultdict
 from typing import cast
 
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
@@ -52,6 +53,42 @@ def backward_transfer(
     return sum(final_stage_accuracy[d] - first_stage_accuracy[d] for d in first_stage_digits) / len(
         first_stage_digits
     )
+
+
+def backward_transfer_over_time(
+    accuracy: np.ndarray, epochs_per_stage: int, stage_digits: list[list[int]]
+) -> np.ndarray:
+    """Backward transfer after every epoch, over all digits introduced in an earlier stage.
+
+    For epoch `e` in stage `s`, the mean over digits `d` introduced in a stage before `s` of
+    `accuracy[e, d]` minus `d`'s accuracy at the last epoch of the stage that introduced it.
+    Digits introduced in stage `s` itself are excluded, so the curve is NaN during stage 0.
+    Unlike the scalar `backward_transfer`, which only covers the first stage's digits, the
+    last point averages over every digit but the final stage's.
+
+    Args:
+        accuracy: Per-epoch, per-digit accuracy, shape (epochs, digits).
+        epochs_per_stage: Epochs every stage trains for.
+        stage_digits: Digits each stage introduces, see `data.build_stage_digits`.
+
+    Raises:
+        ValueError: if `accuracy` has more epochs than the stages provide.
+    """
+    num_epochs = accuracy.shape[0]
+    if num_epochs > len(stage_digits) * epochs_per_stage:
+        raise ValueError(
+            f"{num_epochs} epochs exceed {len(stage_digits)} stages x {epochs_per_stage} epochs"
+        )
+    introduced_in = {digit: stage for stage, digits in enumerate(stage_digits) for digit in digits}
+    bwt = np.full(num_epochs, np.nan)
+    for epoch in range(num_epochs):
+        stage = epoch // epochs_per_stage
+        earlier = [digit for digit, introduced in introduced_in.items() if introduced < stage]
+        if not earlier:
+            continue
+        reference = [accuracy[(introduced_in[d] + 1) * epochs_per_stage - 1, d] for d in earlier]
+        bwt[epoch] = np.mean(accuracy[epoch, earlier] - np.array(reference))
+    return bwt
 
 
 def format_accuracy_matrix(accuracy_by_stage: list[dict[int, float]]) -> str:

@@ -24,6 +24,7 @@ from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from recorded_training import TrainingHooks, TrainingRecord, build_arrays, train_and_record
 from run_config import MlflowSettings, RunConfig
 from run_store import Launch, RunExistsError, open_run, write_run
+from unroll_trace import build_trace_arrays
 
 __all__ = [
     "Job",
@@ -241,7 +242,7 @@ def run_seed(
     write_run(
         job.launch,
         seed_config,
-        build_arrays(record),
+        {**build_arrays(record), **build_trace_arrays(model, stages[-1].test_data, device)},
         config_name=job.config.name,
         metrics=metrics,
         started_at=started_at,
