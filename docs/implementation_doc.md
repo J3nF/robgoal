@@ -46,8 +46,12 @@ notation) starts at `0` regardless of scheme, so `T=1` degenerates to a plain
 output) and `_get_inhibited_output` (the `ai2_diff`/`ai2_gate` branching)
 as two separate one-job helpers.
 
+`ai2_weight` (default `1.0`) scales the inhibition signal as the first statement of
+`_get_inhibited_output`; `0.0` is the no-inhibition control (identical to `T=1`), negative
+values excite. It is set per `RunConfig.ai2_weight` and passed through `FCNN_AI2`.
+
 `forward` also stores `self.last_y_self` (the inhibition signal that fed the
-final unroll step, detached) after every call, for `dynamics_insights.py` to
+final unroll step, detached, *before* the `ai2_weight` factor) after every call, for `dynamics_insights.py` to
 read — a plain tensor attribute, not a parameter/buffer, so it's invisible to
 `state_dict()`/`.parameters()`/gradients.
 
@@ -210,11 +214,18 @@ so plotting code can import it cheaply. Public interface in `__all__`.
   `dims` attribute naming their axes; paths are free-form (`y_self_absmean/hidden_layers.0`),
   so a future `/activations/{layer}` group needs no format change (not implemented). No
   compression or chunking; HDF5 decompresses transparently, so it can be switched on later.
-- Datasets written by training: `accuracy` (stage, digit; float64, NaN for a digit a stage did
-  not evaluate), `train_loss` (epoch, indexed by global epoch), `y_self_absmean/{layer}`
+- Datasets written by training: `accuracy` (epoch, digit; float64, per-digit test accuracy after
+  every epoch, so the last epoch of a stage is that stage's accuracy), `train_loss` (epoch, indexed by global epoch), `y_self_absmean/{layer}`
   (epoch) and, with `RunConfig.capture_y_self_per_epoch`/`_per_batch`,
   `y_self_per_neuron_epoch/{layer}` (epoch, neuron) and `y_self_per_neuron_batch/{layer}`
   (batch, neuron). The CNN has no `AutapticLayer`, hence no `y_self_*` datasets.
+  FCNN runs also store `unroll/*` (from `unroll_trace.build_trace_arrays`, computed from the
+  final model on the full test set): `mean_y` (layer, class), `mean_y_self_used`,
+  `mean_y_tilde`, `mean_abs_y_tilde_class` (layer, class, step), `mean_abs_y_tilde`,
+  `neuron_std_y_tilde` (layer, step). `y_self_used` includes the `ai2_weight` factor, while
+  `y_self_absmean/*` does not. The per-epoch evaluator runs last in the epoch callbacks (so
+  they still see the training batch's `last_y_self`) and inside `fork_rng` (so it does not
+  change the shuffling of later epochs).
 - **Writes** (`write_run_file`, wrapped by `write_run`) are atomic and never overwrite:
   raise `RunExistsError` if the file exists, else write `{name}.h5.tmp` (mode `"x"`, never
   `"w"`; a stale `.tmp` from a crash is partial by construction and removed first), fsync,
@@ -251,7 +262,7 @@ is what runs inside a worker. `sweep.py`/`size_scan.py` own "what to run."
   `sweep.build_configs()`; `run_size_scan(...)` the same plus `hidden_sizes_scan`/
   `channels_scan` for `size_scan.build_size_scan_configs()`. Both call
   `run_launch(configs, request, scan, env)`, which is also the entry point for an injected
-  config list. CLI: `--scan {sweep,size}`, `--num-seeds`, `--dataset`, `--initial-classes`,
+  config list. CLI: `--scan {sweep,size,weights}`, `--num-seeds`, `--dataset`, `--initial-classes`,
   `--classes-per-stage`, `--workers`, `--no-mlflow`, and the required `--goal`, `--method`,
   `--code-changes`. `LaunchEnv` holds results root, lab-book path, repo root, MLflow settings
   and the stage builder (defaults: the repo's; tests inject temporary ones).
@@ -336,6 +347,11 @@ covers PyTorch Lightning, not this repo's custom training loop; see old-lab-book
 `plot_accuracy_heatmap`, `plot_activity_heatmap` (each takes arrays and an optional `ax`, returns
 the `Axes`) -> `save_figure` (creates the directory, honours `savefig.*` rcParams).
 `plot_setup`/`get_colorcycle` set the house style (small figures, high save dpi, transparent).
+
+The weight scan has its own modules: `weight_scan_data.py` (load, aggregate over seeds, CSVs),
+`weight_scan_stats.py` (Welch test with a closed-form t distribution, Holm) and
+`plot_weight_scan.py` (one function per figure, CLI). Diverged seeds (non-finite loss or
+trace) are left out of aggregates and counted in the CSVs.
 `plot_size_scan.py` is a thin script on top: size-scan runs with `initial_classes == 1`, grouped
 per config and dataset, written as `scan_summary.csv` plus the two figures. It pools seeds
 across every launch passed to it. After the legacy import its numbers equal the pre-pipeline
@@ -436,8 +452,14 @@ modules, not implementation code.
   `meta_json`, unknown dataset path. Mutation-checked: removing the dirty check, `os.replace`,
   the exists check, the lab-book exemption, `exist_ok=False`, the tmp cleanup or the HEAD check
   each fails a test.
-- `tests/test_recorded_training.py`: array shapes/dims/dtypes, per-neuron flags, CNN without
-  y_self, NaN for unevaluated digits, hooks.
+- `tests/test_recorded_training.py`: array shapes/dims/dtypes, per-epoch accuracy (last epoch of
+  a stage equals the stage accuracy; evaluating changes neither losses nor recorded y_self),
+  per-neuron flags, CNN without y_self, hooks.
+- `tests/test_autapse.py` (weight): default weight equals the pre-change formula, weight 0
+  equals `T=1` (outputs and gradients), diff+sigmoid at weight 1 equals `T=1` at odd `T`,
+  closed form of diff+sigmoid, negative weights. `tests/test_unroll_trace.py`,
+  `tests/test_metrics.py`, `tests/test_weight_scan_stats.py`, `tests/test_plot_weight_scan.py`
+  cover the trace, time-resolved BWT, statistics and the weight-scan plots.
 - `tests/test_logged_training.py`: the MLflow session against a **real** local sqlite backend
   in `tmp_path` (not mocked -- fast and deterministic, so not the case "mock boundaries, not
   logic" is about; failures are injected by patching `mlflow` calls, the external boundary).

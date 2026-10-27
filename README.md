@@ -57,8 +57,8 @@ This downloads MNIST on first run (to `data/`), trains every config in
 
 - appends an entry (launch id, commit, command, your text) to `docs/lab-book.md`,
 - writes one HDF5 file per run to `results/{launch_id}/{run_name}.h5`, holding
-  the full config, git provenance and the arrays (per-stage accuracy, loss per
-  epoch, `y_self`); open them with `src/run_store.py` / `src/plotting_utils.py`,
+  the full config, git provenance and the arrays (per-epoch accuracy, loss per
+  epoch, `y_self`, the unroll trace); open them with `src/run_store.py` / `src/plotting_utils.py`,
 - prints an accuracy matrix + summary line per run (sequential launches; with
   `--workers N` one progress line per finished job),
 - live-logs params/metrics to a local [MLflow](https://mlflow.org/) tracking
@@ -115,6 +115,12 @@ uv run python src/run_experiments.py --scan size --num-seeds 5 ...
   progressively smaller widths/channel counts) instead of the base sweep, to
   see how ai2 vs. controls degrade as capacity shrinks. Override the widths
   via `hidden_sizes_scan`/`channels_scan`.
+- **ai2 weight scan**: `uv run python src/run_experiments.py --scan weights
+  --initial-classes 1 --num-seeds 5 ...` (once per `--dataset`) runs
+  `sweep.build_weight_scan_configs()`: 2 variants x 2 schemes x 7 `ai2_weight` values
+  (weight 0 is the no-inhibition control), T=5, four hidden layers of width 32. Then
+  `uv run python src/plot_weight_scan.py results/<launch_id> ...` writes the unroll traces,
+  die-off, accuracy and backward-transfer figures plus CSVs to `results/plots/`.
 - **A single config, without the rest of the sweep**: build a `RunConfig`
   (or take one from `sweep.build_configs()`) and launch it with
   `run_experiments.run_launch`, which does the provenance/lab-book/file

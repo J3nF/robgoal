@@ -103,6 +103,22 @@ writes `results/plots/accuracy_vs_size.png`,
 `results/plots/scan_summary.csv` (`--out DIR` to change). It pools seeds across
 every launch it is given, so pass only launches that should be combined.
 
+## 6. ai2 weight scan
+
+28 configs (2 variants x 2 schemes x 7 `ai2_weight` values; weight 0 is the no-inhibition
+control), T=5, hidden sizes `(32, 32, 32, 32)`, 5 epochs per stage. One launch per dataset:
+
+```sh
+uv run python src/run_experiments.py --scan weights --num-seeds 5 --dataset mnist --initial-classes 1 --classes-per-stage 1 --workers 12 --goal "..." --method "..." --code-changes "..."
+uv run python src/run_experiments.py --scan weights --num-seeds 5 --dataset fashion_mnist --initial-classes 1 --classes-per-stage 1 --workers 12 --goal "..." --method "..." --code-changes "..."
+uv run python src/plot_weight_scan.py results/<launch_id_mnist> results/<launch_id_fashion>
+```
+
+`plot_weight_scan.py` writes `results/plots/unroll/*.png`, `dieoff_{dataset}.png`,
+`accuracy_over_time_{dataset}.png`, `bwt_over_time_{dataset}.png`, `unroll_summary.csv`,
+`weight_scan_summary.csv` and `q2_tests.csv` (`--out DIR` to change). Runs written before
+per-epoch evaluation (`accuracy` with dims `(stage, digit)`) are refused.
+
 ## Looking at runs
 
 ```python
