@@ -623,9 +623,10 @@ results/*
 # explicitly -- ignore it too in case that ever silently stops applying.
 /mlruns/
 
-
-# J3nF Claude Code additions
+# J3nF additions
 WRITING_STYLE.md
 CLAUDE.md
 GET_PROMPT.md
 CODING_STYLE.md
+GLOBAL_CLAUDE_LINUX.md
+GLOBAL_CLAUDE_LINUX_NOTS_NORUST.md
