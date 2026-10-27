@@ -283,7 +283,8 @@ def plot_dieoff(cells: dict[CellKey, Cell], dataset: str) -> Figure:
         cell.num_runs - cell.num_finite for key, cell in cells.items() if key[0] == dataset
     )
     fig.suptitle(
-        f"{dataset}: die-off across depth (band = +/-1 std over finite seeds; "
+        f"{dataset}: die-off across depth (band = +/-1 std over finite seeds; values below "
+        f"{LOG_FLOOR:g} drawn at {LOG_FLOOR:g}; "
         f"diverged runs excluded: {diverged})"
     )
     return fig
