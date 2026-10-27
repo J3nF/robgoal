@@ -18,6 +18,9 @@ ANCHOR_SCHEME: Activation_Scheme = "relu_sigmoid"
 T_SWEEP = [2, 5, 8]
 EPOCHS_SWEEP = [2, 10]
 HIDDEN_SIZES_SWEEP = [(64, 32), (512, 256)]
+WEIGHT_SCAN_WEIGHTS = (-2 / 3, -1 / 3, 0.0, 1 / 3, 2 / 3, 1.0, 4 / 3)
+WEIGHT_SCAN_T = 5
+WEIGHT_SCAN_HIDDEN_SIZES = (32, 32, 32, 32)
 
 
 def build_configs() -> list[RunConfig]:
@@ -151,6 +154,37 @@ def _build_hidden_sizes_sweep() -> list[RunConfig]:
     return configs
 
 
+def build_weight_scan_configs() -> list[RunConfig]:
+    """The 28 weight-scan configs: 2 variants x 2 schemes x 7 `ai2_weight` values.
+
+    Weight 0 is the no-inhibition control (identical to `T=1`), weight 1 the unweighted mechanism.
+    Names carry the weight via `weight_label`, so every config has a distinct run-file name.
+    """
+    configs = []
+    for activation_scheme in SCHEMES:
+        for ai2_variant in VARIANTS:
+            for ai2_weight in WEIGHT_SCAN_WEIGHTS:
+                configs.append(
+                    RunConfig(
+                        name=f"fcnn_{ai2_variant}_{activation_scheme}_w{weight_label(ai2_weight)}",
+                        sweep_axis="ai2_weight",
+                        model_kind="fcnn",
+                        epochs_per_stage=BASE_EPOCHS_PER_STAGE,
+                        ai2_variant=ai2_variant,
+                        activation_scheme=activation_scheme,
+                        T=WEIGHT_SCAN_T,
+                        hidden_sizes=WEIGHT_SCAN_HIDDEN_SIZES,
+                        ai2_weight=ai2_weight,
+                    )
+                )
+    return configs
+
+
+def weight_label(ai2_weight: float) -> str:
+    """File-name-safe label of a weight: `-0.667` becomes `-0p667`, `1.0` becomes `1`."""
+    return f"{ai2_weight:.3f}".rstrip("0").rstrip(".").replace(".", "p")
+
+
 def build_model(config: RunConfig) -> nn.Module:
     """Constructs the model `config` describes.
 
@@ -170,4 +204,5 @@ def build_model(config: RunConfig) -> nn.Module:
         ai2_variant=config.ai2_variant,
         activation_scheme=config.activation_scheme,
         hidden_sizes=config.hidden_sizes,
+        ai2_weight=config.ai2_weight,
     )

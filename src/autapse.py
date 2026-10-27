@@ -31,6 +31,9 @@ class AutapticLayer(nn.Module):
             - "ai2_diff": subtract inhibition from the activated output.
             - "ai2_gate": multiplicatively gate the activated output by
               `(1 - inhibition)`.
+        ai2_weight: Factor applied to the inhibition signal before it is combined with
+            the raw output; `1.0` is the unweighted mechanism, `0.0` removes the inhibition
+            (equivalent to `T=1`), negative values turn inhibition into excitation.
         activation_scheme: Which activation drives the main path:
             - "sigmoid": bounded output, inhibition signal is the raw output.
             - "relu_sigmoid": unbounded ReLU output; inhibition signal is
@@ -47,6 +50,7 @@ class AutapticLayer(nn.Module):
             A plain tensor attribute, not a parameter or buffer -- doesn't
             affect `state_dict()`, `.parameters()`, or gradients; see
             `dynamics_insights.get_y_self_absmeans`.
+            Stored *before* the `ai2_weight` factor, so it is the same for every weight.
     """
 
     def __init__(
@@ -56,6 +60,7 @@ class AutapticLayer(nn.Module):
         T: int,
         ai2_variant: AI2_Variant,
         activation_scheme: Activation_Scheme,
+        ai2_weight: float = 1.0,
     ) -> None:
         if T < 1:
             raise ValueError(f"T must be >= 1, got {T}")
@@ -64,6 +69,7 @@ class AutapticLayer(nn.Module):
         self.T = T
         self.ai2_variant = ai2_variant
         self.activation_scheme = activation_scheme
+        self.ai2_weight = ai2_weight
         self.last_y_self: torch.Tensor | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -111,7 +117,11 @@ class AutapticLayer(nn.Module):
         return y_tilde
 
     def _get_inhibited_output(self, y: torch.Tensor, y_self: torch.Tensor) -> torch.Tensor:
-        """Combines `y` with the inhibition signal `y_self` per `self.ai2_variant`."""
+        """Combines `y` with the inhibition signal `y_self` per `self.ai2_variant`.
+
+        `y_self` is scaled by `self.ai2_weight` first, so the weight enters only here.
+        """
+        y_self = self.ai2_weight * y_self
         if self.ai2_variant == "ai2_diff":
             y_tilde = y - y_self
         elif self.ai2_variant == "ai2_gate":

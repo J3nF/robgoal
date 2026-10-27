@@ -20,7 +20,7 @@ class RunConfig:
     Attributes:
         name: Run name, also the stem of the run's `.h5` file in its launch directory.
         sweep_axis: Which dimension this config varies relative to the anchor
-            config ("base", "T", "epochs_per_stage", "hidden_sizes"); logged
+            config ("base", "T", "epochs_per_stage", "hidden_sizes", "ai2_weight"); logged
             as an MLflow tag, not a param.
         model_kind: Discriminates which model `build_model` constructs.
             Explicit rather than inferred from `ai2_variant is None`, since
@@ -39,6 +39,8 @@ class RunConfig:
         hidden_sizes: `None` for `model_kind="cnn"`; required for `"fcnn"`.
         channels: `None` for `model_kind="fcnn"`; optional for `"cnn"` (falls
             back to `models.CNN`'s own default `(16, 32)` when unset).
+        ai2_weight: Inhibition weight of every hidden layer, see `autapse.AutapticLayer`;
+            ignored for `model_kind="cnn"`.
         capture_y_self_per_epoch: Store a per-neuron y_self history dataset in the run file,
             one snapshot per epoch. See `dynamics_insights.get_y_self_per_neuron`.
         capture_y_self_per_batch: Store a per-neuron y_self history dataset in the run file,
@@ -63,6 +65,7 @@ class RunConfig:
     channels: tuple[int, int] | None = None
     capture_y_self_per_epoch: bool = False
     capture_y_self_per_batch: bool = False
+    ai2_weight: float = 1.0
 
 
 @dataclass(frozen=True)

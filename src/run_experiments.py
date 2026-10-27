@@ -13,6 +13,7 @@ import multiprocessing
 import random
 import shlex
 import sys
+from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +59,13 @@ LAB_BOOK = REPO_ROOT / "docs" / "lab-book.md"
 # distinct draws are practically impossible without needing dedup logic.
 _SEED_UPPER_BOUND = 2**31
 _ATTEMPTS = 2  # the first run plus one retry
+
+
+SCAN_BUILDERS: dict[str, Callable[[], list[RunConfig]]] = {
+    "sweep": sweep.build_configs,
+    "size": size_scan.build_size_scan_configs,
+    "weights": sweep.build_weight_scan_configs,
+}
 
 
 def _default_mlflow_settings() -> MlflowSettings:
@@ -405,10 +413,10 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scan",
-        choices=["sweep", "size"],
+        choices=list(SCAN_BUILDERS),
         default="sweep",
         help="'sweep' (default): sweep.py's 14 configs. 'size': size_scan.py's "
-        "shrinking-network scan.",
+        "shrinking-network scan. 'weights': sweep.py's ai2_weight scan (28 configs).",
     )
     parser.add_argument("--num-seeds", type=int, default=NUM_SEEDS)
     parser.add_argument("--dataset", choices=["mnist", "fashion_mnist"], default="mnist")
@@ -453,7 +461,7 @@ def _cli() -> int:
         use_mlflow=not args.no_mlflow,
         command="python " + shlex.join(sys.argv),
     )
-    configs = sweep.build_configs() if args.scan == "sweep" else size_scan.build_size_scan_configs()
+    configs = SCAN_BUILDERS[args.scan]()
     try:
         run_launch(configs, request, args.scan, LaunchEnv())
     except (ValueError, DirtyTreeError, LaunchExistsError) as exc:

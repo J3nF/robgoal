@@ -627,3 +627,39 @@ def test_custom_scan_widths_appear_in_the_recorded_call(monkeypatch: pytest.Monk
 
     assert "hidden_sizes_scan=[(4, 2)]" in seen[0].command
     assert "channels_scan=[(2, 4)]" in seen[0].command
+
+
+@pytest.mark.parametrize(
+    ("scan", "config_count", "sweep_axes"),
+    [("sweep", 14, None), ("size", 56, {"size_scan"}), ("weights", 28, {"ai2_weight"})],
+)
+def test_cli_runs_the_config_list_of_the_chosen_scan(
+    monkeypatch: pytest.MonkeyPatch, scan: str, config_count: int, sweep_axes: set[str] | None
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        run_experiments,
+        "run_launch",
+        lambda configs, request, scan_name, env: captured.append((configs, scan_name)),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_experiments.py",
+            "--scan",
+            scan,
+            "--goal",
+            "g",
+            "--method",
+            "m",
+            "--code-changes",
+            "c",
+        ],
+    )
+
+    assert run_experiments._cli() == 0
+
+    [(configs, scan_name)] = captured
+    assert (len(configs), scan_name) == (config_count, scan)
+    if sweep_axes is not None:
+        assert {config.sweep_axis for config in configs} == sweep_axes

@@ -105,7 +105,7 @@ class LaunchSpec:
         goal, method, code_changes: Required, non-blank. `code_changes` is how big source
             changes get recorded; it is never auto-generated.
         command: The command line, or the equivalent call, as typed.
-        scan: Scan type ("sweep" or "size").
+        scan: Scan type ("sweep", "size" or "weights").
         planned_runs: Number of `.h5` files the launch is meant to produce.
         dataset, seeds_mode: Free-form descriptions shown in the entry.
         initial_classes, classes_per_stage: The class split every run in the launch uses.

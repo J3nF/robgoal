@@ -17,6 +17,7 @@ class FCNN_AI2(nn.Module):
         ai2_variant: Inhibition variant, see `autapse.AutapticLayer`.
         activation_scheme: Activation scheme, see `autapse.AutapticLayer`.
         hidden_sizes: Output width of each hidden `AutapticLayer`, in order.
+        ai2_weight: Inhibition weight of every hidden layer, see `autapse.AutapticLayer`.
     """
 
     def __init__(
@@ -25,11 +26,12 @@ class FCNN_AI2(nn.Module):
         ai2_variant: AI2_Variant,
         activation_scheme: Activation_Scheme,
         hidden_sizes: tuple[int, ...] = (256, 128),
+        ai2_weight: float = 1.0,
     ) -> None:
         super().__init__()
         layer_sizes = (28 * 28, *hidden_sizes)
         self.hidden_layers = nn.ModuleList(
-            AutapticLayer(in_features, out_features, T, ai2_variant, activation_scheme)
+            AutapticLayer(in_features, out_features, T, ai2_variant, activation_scheme, ai2_weight)
             for in_features, out_features in zip(layer_sizes, hidden_sizes)
         )
         self.output = nn.Linear(hidden_sizes[-1], 10)
