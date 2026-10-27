@@ -16,7 +16,7 @@ from weight_scan_data import WEIGHTS, load_weight_scan
 
 STEPS = 5
 LAYERS = 4
-EPOCHS = 10  # one epoch per stage, 10 stages
+EPOCHS = 50  # 10 stages of 5 epochs, as in the real scan
 
 
 def _arrays(rng: np.random.Generator, weight: float, diverged: bool) -> dict[str, RunArray]:
@@ -211,3 +211,23 @@ def test_accuracy_figure_spans_zero_to_one(runs_dir: Path) -> None:
     fig = plot_weight_scan.plot_accuracy_over_time(cells, "mnist")
 
     assert fig.axes[0].get_ylim() == (0.0, 1.0)
+
+
+def test_q2_tests_survive_a_layer_with_exactly_zero_activity(
+    runs_dir: Path, tmp_path: Path
+) -> None:
+    cells = load_weight_scan(runs_dir)
+    cells[("mnist", "ai2_gate", "relu_sigmoid", WEIGHTS[3])].arrays["unroll/mean_abs_y_tilde"][
+        0, 3, -1
+    ] = 0.0  # a seed whose layer 4 is dead at the last step
+
+    weight_scan_data.write_q2_tests_csv(cells, tmp_path / "q2.csv")
+
+    rows = list(csv.DictReader((tmp_path / "q2.csv").open()))
+    dead = next(
+        r
+        for r in rows
+        if (r["variant"], r["scheme"], r["weight"], r["statistic"])
+        == ("ai2_gate", "relu_sigmoid", str(WEIGHTS[3]), "abs")
+    )
+    assert math.isnan(float(dead["p"]))

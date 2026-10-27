@@ -75,10 +75,14 @@ def t_quantile(probability: float, df: int) -> float:
 
 
 def welch_test(a: np.ndarray, b: np.ndarray) -> WelchResult:
-    """Compares the means of `a` and `b` (sample variances, ddof=1), reporting `mean(a) - mean(b)`."""
+    """Compares the means of `a` and `b`; reports `mean(a) - mean(b)` (variances use ddof=1).
+
+    Returns NaN p-value and interval when a group has fewer than 2 values or any value is not
+    finite (e.g. the log ratio of a layer whose activity is exactly 0).
+    """
     n_a, n_b = len(a), len(b)
     diff = float(np.mean(a) - np.mean(b))
-    if n_a < 2 or n_b < 2:
+    if n_a < 2 or n_b < 2 or not (np.isfinite(a).all() and np.isfinite(b).all()):
         return WelchResult(diff, math.nan, 0, math.nan, math.nan, math.nan)
     var_a, var_b = float(np.var(a, ddof=1)) / n_a, float(np.var(b, ddof=1)) / n_b
     se = math.sqrt(var_a + var_b)
@@ -92,7 +96,7 @@ def welch_test(a: np.ndarray, b: np.ndarray) -> WelchResult:
 
 
 def holm_adjust(p_values: list[float]) -> list[float]:
-    """Holm-Bonferroni adjusted p-values, in input order; NaN inputs stay NaN and are not counted."""
+    """Holm-Bonferroni adjusted p-values in input order; NaN inputs stay NaN, uncounted."""
     valid = sorted((p, index) for index, p in enumerate(p_values) if not math.isnan(p))
     adjusted = [math.nan] * len(p_values)
     running_max = 0.0

@@ -62,3 +62,10 @@ def test_holm_adjust_skips_nan_and_caps_at_one() -> None:
 
     assert math.isnan(adjusted[0])
     assert adjusted[1:] == pytest.approx([1.0, 1.0])
+
+
+def test_welch_test_is_nan_for_non_finite_values() -> None:
+    dead_layer = np.array([-np.inf, 1.0, 2.0, 3.0, 4.0])
+
+    assert math.isnan(welch_test(dead_layer, np.arange(5.0)).p)
+    assert math.isnan(welch_test(np.array([np.nan, 1.0, 2.0]), np.arange(5.0)).p)

@@ -8,6 +8,7 @@ run files of the given launches (`run_experiments.py --scan weights --initial-cl
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -251,10 +252,22 @@ def plot_dieoff(cells: dict[CellKey, Cell], dataset: str) -> Figure:
                 if cell is None or cell.num_finite == 0:
                     continue
                 mean, std = plotting_utils.mean_std(cell.arrays[name][:, :, -1])
-                mean = np.maximum(mean, LOG_FLOOR)
-                std = np.minimum(std, mean - LOG_FLOOR)
+                style = _weight_style(weight)
                 plotting_utils.plot_line_band(
-                    layers, mean, std, ax, label=f"w={WEIGHT_TEXT[weight]}", **_weight_style(weight)
+                    layers,
+                    np.maximum(mean, LOG_FLOOR),
+                    None,
+                    ax,
+                    label=f"w={WEIGHT_TEXT[weight]}",
+                    **style,
+                )
+                ax.fill_between(
+                    layers,
+                    np.maximum(mean - std, LOG_FLOOR),
+                    np.maximum(mean + std, LOG_FLOOR),
+                    color=style["color"],
+                    alpha=0.2,
+                    linewidth=0,
                 )
             ax.set_yscale("log")
             ax.set_xticks(layers)
@@ -266,7 +279,13 @@ def plot_dieoff(cells: dict[CellKey, Cell], dataset: str) -> Figure:
                 ax.set_ylabel(ylabel)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False)
-    fig.suptitle(f"{dataset}: die-off across depth (band = +/-1 std over finite seeds)")
+    diverged = sum(
+        cell.num_runs - cell.num_finite for key, cell in cells.items() if key[0] == dataset
+    )
+    fig.suptitle(
+        f"{dataset}: die-off across depth (band = +/-1 std over finite seeds; "
+        f"diverged runs excluded: {diverged})"
+    )
     return fig
 
 
@@ -324,7 +343,11 @@ def _get_bwt_curves(cell: Cell) -> np.ndarray:
 
 
 def _plot_over_time(
-    cells: dict[CellKey, Cell], dataset: str, get_curves, ylabel: str, symmetric: bool
+    cells: dict[CellKey, Cell],
+    dataset: str,
+    get_curves: Callable[[Cell], np.ndarray],
+    ylabel: str,
+    symmetric: bool,
 ) -> Figure:
     fig, axes = plt.subplots(2, 2, figsize=(10, 6.5), squeeze=False, sharex=True, sharey=True)
     extent = 0.0
@@ -357,7 +380,12 @@ def _plot_over_time(
         ax.set_xlabel("cumulative epoch")
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False)
-    fig.suptitle(f"{dataset} (band = +/-1 std over finite seeds)")
+    diverged = sum(
+        cell.num_runs - cell.num_finite for key, cell in cells.items() if key[0] == dataset
+    )
+    fig.suptitle(
+        f"{dataset} (band = +/-1 std over finite seeds; diverged runs excluded: {diverged})"
+    )
     return fig
 
 
@@ -382,7 +410,8 @@ def _warn_about_gaps(cells: dict[CellKey, Cell]) -> None:
     for key, cell in sorted(cells.items()):
         if cell.num_finite < cell.num_runs:
             print(
-                f"WARNING: {key}: {cell.num_runs - cell.num_finite} of {cell.num_runs} runs diverged (excluded)",
+                f"WARNING: {key}: {cell.num_runs - cell.num_finite} of {cell.num_runs} runs "
+                "diverged (excluded)",
                 file=sys.stderr,
             )
     expected = {
