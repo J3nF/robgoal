@@ -115,3 +115,18 @@ def test_subsample_fraction_one_is_the_identity() -> None:
 def test_subsample_rejects_fractions_outside_zero_one(fraction: float) -> None:
     with pytest.raises(ValueError, match="fraction"):
         subsample_stages(build_stages(Fake(2, 0.0), Fake(2, 0.0)), fraction, seed=0)
+
+
+def test_ordered_mixed_dataset_is_a_fixed_permutation_with_consistent_labels() -> None:
+    plain = _mixed()
+    shuffled = MixedDataset(Fake(4, 1.0), Fake(4, 2.0), order_seed=0)
+    again = MixedDataset(Fake(4, 1.0), Fake(4, 2.0), order_seed=0)
+    assert torch.equal(shuffled.targets, again.targets)
+    assert not torch.equal(shuffled.targets, plain.targets)
+    assert sorted(shuffled.targets.tolist()) == sorted(plain.targets.tolist())
+    for index in range(len(shuffled)):
+        image, label = shuffled[index]
+        assert label == int(shuffled.targets[index])
+        assert image.item() == (1.0 if label < 10 else 2.0)
+    first_half = shuffled.targets[: len(shuffled) // 2]
+    assert (first_half < 10).any() and (first_half >= 10).any()  # both datasets interleaved

@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from autapse import AutapticLayer, LeakyLayer, reset_inhibition_state
 from data import LabeledDataset
+from metrics import TEST_BATCH_SIZE
 from run_store import RunArray
 
 __all__ = [
@@ -27,8 +28,6 @@ __all__ = [
     "record_test_stage",
     "record_train_batch",
 ]
-
-TEST_BATCH_SIZE = 256
 
 
 @dataclass

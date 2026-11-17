@@ -24,6 +24,7 @@ from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
 
 import plotting_utils as pu
+from data import MIXED_FASHION_OFFSET
 from metrics import backward_transfer_over_time
 from run_store import RunFile
 
@@ -124,7 +125,7 @@ def get_styles(cells: list[Cell]) -> dict[str, dict]:
 
 
 def _class_name(label: int) -> str:
-    return str(label) if label < 10 else f"F{label - 10}"
+    return str(label) if label < MIXED_FASHION_OFFSET else f"F{label - MIXED_FASHION_OFFSET}"
 
 
 # --- heatmaps (2.0) ---------------------------------------------------------------------------
@@ -138,6 +139,7 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
             protocol's random order); a strip below shows the share of seeds in which each
             rank is a MNIST class.
     """
+    num_seeds = len(cells[0].runs)
     columns = min(4, len(cells))
     rows = -(-len(cells) // columns)
     mixed = dataset == "mixed"
@@ -156,7 +158,11 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
         ax.set_title(cell.label, fontsize="x-small")
     if by_rank and mixed:
         share = np.mean(
-            [[d < 10 for digits in sd for d in digits] for sd in cells[0].stage_digits()], axis=0
+            [
+                [d < MIXED_FASHION_OFFSET for digits in sd for d in digits]
+                for sd in cells[0].stage_digits()
+            ],
+            axis=0,
         )
         strip = axes[-1, 0]
         strip.set_visible(True)
@@ -170,7 +176,7 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
     fig.colorbar(sm, ax=axes[:rows].ravel().tolist(), label="test accuracy (0-1)", shrink=0.8)
     order = "by introduction rank" if by_rank else "by class label"
     fig.suptitle(
-        f"{tag}: per-class test accuracy over epochs, {dataset}, {order}, seed mean (5 seeds)",
+        f"{tag}: per-class test accuracy over epochs, {dataset}, {order}, seed mean ({num_seeds} seeds)",
         fontsize="small",
     )
     return fig
@@ -237,6 +243,7 @@ def get_newest_class_curves(cell: Cell) -> tuple[np.ndarray, np.ndarray]:
 
 def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figure:
     """Newest-class accuracy and backward transfer per stage, all models in the same axes."""
+    num_seeds = len(cells[0].runs)
     styles = get_styles(cells)
     fig, axes = plt.subplots(1, 2, figsize=(7.5, 2.8), sharex=True)
     low = 0.0
@@ -267,7 +274,7 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
     fig.suptitle(
-        f"{tag}: newest class per stage, {dataset}, mean +/- std over 5 seeds "
+        f"{tag}: newest class per stage, {dataset}, mean +/- std over {num_seeds} seeds "
         "(backward-transfer axis spans the data range, linear)",
         fontsize="small",
     )
@@ -323,6 +330,7 @@ def plot_inhibition_grid(
     Both columns of a row share the y axis, which spans 0 to the largest value over all
     models (`limits`), so models are comparable.
     """
+    num_seeds = len(cell.runs)
     layers = get_layers(cell)
     fig, axes = plt.subplots(
         len(layers), 2, figsize=(6.4, 1.5 * len(layers) + 0.9), squeeze=False, sharey="row"
@@ -361,7 +369,7 @@ def plot_inhibition_grid(
         shrink=0.8,
     )
     fig.suptitle(
-        f"{tag}: inhibition {statistic} per layer, {cell.label}, {dataset}, mean +/- std over 5 seeds; "
+        f"{tag}: inhibition {statistic} per layer, {cell.label}, {dataset}, mean +/- std over {num_seeds} seeds; "
         "controls have no inhibition and are not shown",
         fontsize="x-small",
     )
@@ -371,6 +379,7 @@ def plot_inhibition_grid(
 def plot_inhibition_eval_comparison(cells: list[Cell], dataset: str, tag: str) -> Figure:
     """Test-set inhibition mean (left) and variance (right) per layer, one line per model."""
     inhibiting = [c for c in cells if get_layers(c)]
+    num_seeds = len(inhibiting[0].runs)
     styles = get_styles(inhibiting)
     layers = get_layers(inhibiting[0])
     fig, axes = plt.subplots(
@@ -400,7 +409,7 @@ def plot_inhibition_eval_comparison(cells: list[Cell], dataset: str, tag: str) -
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
     fig.suptitle(
-        f"{tag}: inhibition after each stage, {dataset}, mean +/- std over 5 seeds",
+        f"{tag}: inhibition after each stage, {dataset}, mean +/- std over {num_seeds} seeds",
         fontsize="small",
     )
     return fig

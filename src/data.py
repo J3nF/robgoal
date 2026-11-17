@@ -17,6 +17,7 @@ DatasetName = Literal["mnist", "fashion_mnist", "mixed"]
 # Label count per dataset; "mixed" is MNIST (labels 0-9) plus FashionMNIST (labels 10-19).
 NUM_CLASSES: dict[DatasetName, int] = {"mnist": 10, "fashion_mnist": 10, "mixed": 20}
 MIXED_FASHION_OFFSET = 10
+MIXED_TEST_ORDER_SEED = 0
 
 # torchvision dataset class + per-channel normalization (mean, std), computed
 # over each dataset's own training set.
@@ -77,7 +78,7 @@ class Stage:
         index: Stage number, 0-5.
         digits_seen: All digit labels introduced by this stage (cumulative).
         train_subset: Training examples for every digit in `digits_seen`.
-        test_data: The full MNIST test set (all 10 digits), used both to
+        test_data: The full test set (all classes of the dataset), used both to
             measure forgetting on seen digits and generalization to unseen ones.
     """
 
@@ -94,14 +95,27 @@ class MixedDataset:
     standard deviation. A network can then in principle tell the datasets apart by intensity
     statistics alone, a shortcut this protocol does not remove.
 
+    Args:
+        order_seed: If given, the examples come in one fixed random order drawn from this seed
+            instead of MNIST first. The test set uses this so a leaky layer's stream mixes both
+            datasets, as the shuffled training batches do, and the order is the same for every run.
+
     Attributes:
-        targets: Labels of all examples, MNIST first.
+        targets: Labels of all examples in the dataset's order.
     """
 
-    def __init__(self, mnist: LabeledDataset, fashion: LabeledDataset) -> None:
+    def __init__(
+        self, mnist: LabeledDataset, fashion: LabeledDataset, order_seed: int | None = None
+    ) -> None:
         self._mnist = mnist
         self._fashion = fashion
-        self.targets = torch.cat([mnist.targets, fashion.targets + MIXED_FASHION_OFFSET])
+        targets = torch.cat([mnist.targets, fashion.targets + MIXED_FASHION_OFFSET])
+        self._order = (
+            None
+            if order_seed is None
+            else torch.randperm(len(targets), generator=torch.Generator().manual_seed(order_seed))
+        )
+        self.targets = targets if self._order is None else targets[self._order]
 
     def __len__(self) -> int:
         return len(self._mnist) + len(self._fashion)
@@ -109,6 +123,8 @@ class MixedDataset:
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
         if not 0 <= index < len(self):
             raise IndexError(f"index {index} out of range for {len(self)} examples")
+        if self._order is not None:
+            index = int(self._order[index].item())
         if index < len(self._mnist):
             return self._mnist[index]
         image, label = self._fashion[index - len(self._mnist)]
@@ -121,13 +137,17 @@ def get_mnist_data(
     """Downloads (if needed) and returns a train/test dataset pair.
 
     Args:
-        dataset: "mnist" (default), "fashion_mnist", or "mixed" (see `MixedDataset`; both the
-            train and the test set are the MNIST-then-FashionMNIST union).
+        dataset: "mnist" (default), "fashion_mnist", or "mixed" (see `MixedDataset`; train and
+            test set are the MNIST plus FashionMNIST union, the test set in one fixed random
+            order).
     """
     if dataset == "mixed":
         mnist_train, mnist_test = get_mnist_data(root, "mnist")
         fashion_train, fashion_test = get_mnist_data(root, "fashion_mnist")
-        return MixedDataset(mnist_train, fashion_train), MixedDataset(mnist_test, fashion_test)
+        return (
+            MixedDataset(mnist_train, fashion_train),
+            MixedDataset(mnist_test, fashion_test, order_seed=MIXED_TEST_ORDER_SEED),
+        )
     # certifi's bundle covers CAs missing from some systems' trust stores.
     ssl._create_default_https_context = (  # ty: ignore[invalid-assignment]
         lambda *a, **kw: ssl.create_default_context(cafile=certifi.where())

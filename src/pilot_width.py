@@ -261,12 +261,12 @@ def _plot_width_table(rows: list[WidthRow], choice: WidthChoice, plots_dir: Path
         if choice.width:
             ax.axvline(choice.width, color="black", linewidth=0.8, alpha=0.6)
     axes[0].set_ylabel("final backward transfer D")
-    axes[1].set_ylabel("final avg accuracy (10 classes)")
+    axes[1].set_ylabel("final avg accuracy (all classes)")
     axes[0].set_ylim(min(-0.05, min(row.d_low for row in rows)) * 1.05, 0.05)
     axes[1].set_ylim(0, 1)
     fig.legend(*axes[0].get_legend_handles_labels(), loc="outside right center", frameon=False)
     fig.suptitle(
-        f"Size pilot (coarse: 1 epoch/stage), MNIST, 5 seeds; mean and 95% t-interval; "
+        f"Size pilot (coarse: 1 epoch/stage), MNIST, {rows[0].num_seeds} seeds; mean and 95% t-interval; "
         f"chosen W={choice.width}"
     )
     for suffix in ("png", "pdf"):

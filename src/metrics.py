@@ -11,10 +11,15 @@ from torch.utils.data import DataLoader, Dataset
 from autapse import reset_inhibition_state
 from data import LabeledDataset
 
+TEST_BATCH_SIZE = 256  # fixed so a leaky layer sees the same test stream in every evaluation
+
 
 @torch.no_grad()
 def evaluate_per_digit_accuracy(
-    model: nn.Module, test_data: LabeledDataset, device: torch.device, batch_size: int = 256
+    model: nn.Module,
+    test_data: LabeledDataset,
+    device: torch.device,
+    batch_size: int = TEST_BATCH_SIZE,
 ) -> dict[int, float]:
     """Computes test accuracy for each class present in `test_data` (10 digits, or 20 classes).
 

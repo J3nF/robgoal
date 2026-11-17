@@ -132,7 +132,7 @@ def main(
     Args:
         goal, method, code_changes: Required free text, copied into the lab book entry.
         num_seeds: Seed replicates per config, see `_draw_seeds`.
-        dataset: "mnist" (default) or "fashion_mnist".
+        dataset: "mnist" (default), "fashion_mnist" or "mixed" (20 classes, see `data.MixedDataset`).
         initial_classes: How many classes stage 0 introduces, see `data.build_stage_digits`.
         classes_per_stage: How many new classes each later stage introduces.
         workers: Parallel worker processes; 1 runs in-process.
@@ -261,13 +261,15 @@ def plan_jobs(
 ) -> list[tuple[RunConfig, tuple[int, ...]]]:
     """Pairs each config (with the launch's dataset and class split set) with its drawn seeds.
 
-    Seeds are drawn here, once, so a retried job reruns the same seeds.
+    Seeds are drawn here, once per launch and shared by all configs, so a retried job reruns the
+    same seeds and every model sees the same class orders and training subsets (a paired design).
 
     Raises:
         ValueError: if two planned runs would share a file name.
     """
     plan = []
     names: set[str] = set()
+    seeds = tuple(_draw_seeds(request.num_seeds))
     for config in configs:
         full = dataclasses.replace(
             config,
@@ -280,7 +282,6 @@ def plan_jobs(
         )
         if request.epochs_per_stage is not None:
             full = dataclasses.replace(full, epochs_per_stage=request.epochs_per_stage)
-        seeds = tuple(_draw_seeds(request.num_seeds))
         for seed in seeds:
             name = build_seed_variant(full, seed, len(seeds)).name
             if name in names:

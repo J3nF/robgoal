@@ -81,3 +81,8 @@ def test_get_seed_stages_is_deterministic_per_seed_and_differs_between_seeds() -
 def test_get_seed_stages_without_options_returns_the_stages() -> None:
     stages = make_stages(2)
     assert get_seed_stages(stages, make_config("a")) is stages
+
+
+def test_seeds_are_shared_by_all_configs_of_a_launch() -> None:
+    plan = run_experiments.plan_jobs([make_config("a"), make_config("b")], _request(num_seeds=4))
+    assert plan[0][1] == plan[1][1] and len(set(plan[0][1])) == 4
