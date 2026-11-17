@@ -280,7 +280,9 @@ def plot_class_time_heatmap(
     ax.set_xlabel("class")
     ax.set_ylabel("epoch (time)")
     ax.set_xticks(range(num_classes))
-    ax.set_xticklabels(class_labels if class_labels is not None else range(num_classes))
+    ax.set_xticklabels(
+        class_labels if class_labels is not None else [str(c) for c in range(num_classes)]
+    )
     if epochs_per_stage is not None:
         for boundary in range(epochs_per_stage, num_epochs, epochs_per_stage):
             ax.axhline(boundary - 0.5, color="white", linestyle=":", linewidth=0.5)

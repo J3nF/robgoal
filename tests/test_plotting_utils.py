@@ -260,17 +260,17 @@ def test_class_time_heatmap_averages_seeds_fixes_range_and_marks_introductions()
     )
     image = ax.images[0]
     assert image.get_clim() == (0.0, 1.0)
-    assert np.allclose(image.get_array(), 0.4)
+    assert np.allclose(np.asarray(image.get_array()), 0.4)
     assert ax.get_xlabel() == "class" and "epoch" in ax.get_ylabel()
-    offsets = ax.collections[0].get_offsets()
-    assert [int(y) for _, y in offsets] == [1, 3, 5, 5]
+    rows = np.asarray(ax.collections[0].get_offsets())[:, 1]
+    assert rows.astype(int).tolist() == [1, 3, 5, 5]
     plt.close("all")
 
 
 def test_class_time_heatmap_ignores_nan_seeds_and_accepts_one_run() -> None:
     accuracy = np.stack([np.full((2, 3), np.nan), np.full((2, 3), 0.5)])
     ax = pu.plot_class_time_heatmap(accuracy, colorbar=False)
-    assert np.allclose(ax.images[0].get_array(), 0.5)
+    assert np.allclose(np.asarray(ax.images[0].get_array()), 0.5)
     plt.close("all")
 
 
