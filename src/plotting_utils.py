@@ -40,6 +40,7 @@ def plot_setup(fig_dpi=100, save_dpi=1200):
     """Sets the house style: small constrained-layout figures saved at high dpi, transparent.
 
     Small figures at high dpi keep text large relative to the figure; this is deliberate.
+    The x margin is zero so that the axes span exactly the data range.
     """
     plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams["figure.dpi"] = fig_dpi
@@ -47,6 +48,7 @@ def plot_setup(fig_dpi=100, save_dpi=1200):
     plt.rcParams["savefig.bbox"] = "tight"
     plt.rcParams["savefig.dpi"] = save_dpi
     plt.rcParams["savefig.transparent"] = True
+    plt.rcParams["axes.xmargin"] = 0
 
 
 def get_colorcycle(N_colors, cmap="viridis"):

@@ -276,6 +276,7 @@ def _plot_width_table(rows: list[WidthRow], choice: WidthChoice, plots_dir: Path
             marker=marker,
             linestyle=style,
             capsize=2,
+            clip_on=False,
             label=family,
         )
         axes[1].plot(
@@ -284,6 +285,7 @@ def _plot_width_table(rows: list[WidthRow], choice: WidthChoice, plots_dir: Path
             color=color,
             marker=marker,
             linestyle=style,
+            clip_on=False,
         )
     axes[0].axhspan(-1, PRESENT_BELOW, color="gray", alpha=0.15, linewidth=0)
     axes[0].axhline(ABSENT_ABOVE, color="gray", linestyle=":", linewidth=0.8)
