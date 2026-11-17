@@ -90,7 +90,10 @@ def get_model_trace(model: nn.Module, images: torch.Tensor) -> list[LayerTrace]:
 
 @torch.no_grad()
 def build_trace_arrays(
-    model: nn.Module, test_data: LabeledDataset, device: torch.device
+    model: nn.Module,
+    test_data: LabeledDataset,
+    device: torch.device,
+    num_classes: int = NUM_CLASSES,
 ) -> dict[str, RunArray]:
     """The `unroll/*` datasets of a run file, from the whole test set through the final model.
 
@@ -111,7 +114,7 @@ def build_trace_arrays(
     if not traces:
         return {}
     labels = labels.to(device)
-    class_masks = [labels == digit for digit in range(NUM_CLASSES)]
+    class_masks = [labels == digit for digit in range(num_classes)]
     per_layer: dict[str, list[torch.Tensor]] = {name: [] for name in _TRACE_DIMS}
     for trace in traces:
         sample_y_tilde = trace.y_tilde.mean(dim=-1)  # (steps, batch)

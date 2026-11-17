@@ -24,7 +24,6 @@ from run_store import Launch
 
 __all__ = ["MlflowSession", "configure", "with_busy_timeout"]
 
-ALL_DIGITS = frozenset(range(10))
 # Seconds. MLflow 3.15 hard-codes `PRAGMA busy_timeout = 20000` per session (no setting), so
 # this only widens the connection-level timeout, via the SQLAlchemy URL.
 SQLITE_CONNECT_TIMEOUT = 60
@@ -199,7 +198,9 @@ def _make_on_stage_end(stages: list[Stage]) -> Callable[[int, dict[int, float]],
             "avg_accuracy_seen", average_accuracy(per_digit_accuracy, digits_seen), step=stage_index
         )
         mlflow.log_metric(
-            "avg_accuracy_all", average_accuracy(per_digit_accuracy, ALL_DIGITS), step=stage_index
+            "avg_accuracy_all",
+            average_accuracy(per_digit_accuracy, frozenset(per_digit_accuracy)),
+            step=stage_index,
         )
         # 0.0 at stage_index=0 by construction (first stage compared to itself).
         mlflow.log_metric(

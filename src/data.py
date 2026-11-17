@@ -1,6 +1,7 @@
 """Cumulative MNIST/FashionMNIST protocol. See old-lab-book.md, "Class-incremental
 data protocol"."""
 
+import random
 import ssl
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
@@ -11,11 +12,15 @@ import torchvision
 from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 
-DatasetName = Literal["mnist", "fashion_mnist"]
+DatasetName = Literal["mnist", "fashion_mnist", "mixed"]
+
+# Label count per dataset; "mixed" is MNIST (labels 0-9) plus FashionMNIST (labels 10-19).
+NUM_CLASSES: dict[DatasetName, int] = {"mnist": 10, "fashion_mnist": 10, "mixed": 20}
+MIXED_FASHION_OFFSET = 10
 
 # torchvision dataset class + per-channel normalization (mean, std), computed
 # over each dataset's own training set.
-_DATASETS: dict[DatasetName, tuple[type, tuple[float, ...], tuple[float, ...]]] = {
+_DATASETS: dict[str, tuple[type, tuple[float, ...], tuple[float, ...]]] = {
     "mnist": (torchvision.datasets.MNIST, (0.1307,), (0.3081,)),
     "fashion_mnist": (torchvision.datasets.FashionMNIST, (0.2860,), (0.3530,)),
 }
@@ -82,14 +87,47 @@ class Stage:
     test_data: LabeledDataset
 
 
+class MixedDataset:
+    """MNIST followed by FashionMNIST as one 20-class dataset (FashionMNIST labels shifted by 10).
+
+    Each part keeps its own transform, so each dataset is normalised with its own mean and
+    standard deviation. A network can then in principle tell the datasets apart by intensity
+    statistics alone, a shortcut this protocol does not remove.
+
+    Attributes:
+        targets: Labels of all examples, MNIST first.
+    """
+
+    def __init__(self, mnist: LabeledDataset, fashion: LabeledDataset) -> None:
+        self._mnist = mnist
+        self._fashion = fashion
+        self.targets = torch.cat([mnist.targets, fashion.targets + MIXED_FASHION_OFFSET])
+
+    def __len__(self) -> int:
+        return len(self._mnist) + len(self._fashion)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
+        if not 0 <= index < len(self):
+            raise IndexError(f"index {index} out of range for {len(self)} examples")
+        if index < len(self._mnist):
+            return self._mnist[index]
+        image, label = self._fashion[index - len(self._mnist)]
+        return image, label + MIXED_FASHION_OFFSET
+
+
 def get_mnist_data(
     root: str = "data", dataset: DatasetName = "mnist"
 ) -> tuple[LabeledDataset, LabeledDataset]:
     """Downloads (if needed) and returns a train/test dataset pair.
 
     Args:
-        dataset: "mnist" (default) or "fashion_mnist".
+        dataset: "mnist" (default), "fashion_mnist", or "mixed" (see `MixedDataset`; both the
+            train and the test set are the MNIST-then-FashionMNIST union).
     """
+    if dataset == "mixed":
+        mnist_train, mnist_test = get_mnist_data(root, "mnist")
+        fashion_train, fashion_test = get_mnist_data(root, "fashion_mnist")
+        return MixedDataset(mnist_train, fashion_train), MixedDataset(mnist_test, fashion_test)
     # certifi's bundle covers CAs missing from some systems' trust stores.
     ssl._create_default_https_context = (  # ty: ignore[invalid-assignment]
         lambda *a, **kw: ssl.create_default_context(cafile=certifi.where())
@@ -142,3 +180,62 @@ def _get_digit_indices(dataset: LabeledDataset, digits: frozenset[int]) -> list[
     mask = torch.isin(dataset.targets, torch.tensor(sorted(digits)))
     digit_indices = torch.nonzero(mask).squeeze(1).tolist()
     return digit_indices
+
+
+def permute_stage_digits(stage_digits: list[list[int]], seed: int) -> list[list[int]]:
+    """Relabels the classes of `stage_digits` by a random permutation drawn from `seed`.
+
+    The stage sizes stay, only which classes enter in which stage changes; so with one class per
+    stage this is a random introduction order. The same seed always gives the same order.
+    """
+    classes = sorted(digit for digits in stage_digits for digit in digits)
+    shuffled = classes.copy()
+    random.Random(seed).shuffle(shuffled)
+    relabel = dict(zip(classes, shuffled, strict=True))
+    return [[relabel[digit] for digit in digits] for digits in stage_digits]
+
+
+def reorder_stages(stages: list[Stage], stage_digits: list[list[int]]) -> list[Stage]:
+    """Rebuilds `stages` for another class-to-stage assignment on the same underlying data.
+
+    `stage_digits` must cover the classes the stages cover; the datasets are taken from the
+    last stage's training subset and test data, so a `Stage` list from `build_stages` is needed.
+    """
+    train_data = cast(LabeledDataset, stages[-1].train_subset.dataset)
+    return build_stages(train_data, stages[-1].test_data, stage_digits=stage_digits)
+
+
+def subsample_stages(stages: list[Stage], fraction: float, seed: int) -> list[Stage]:
+    """Keeps a random `fraction` of the training examples (the same ones in every stage).
+
+    Used for coarse runs. The draw depends only on `seed`, and a class keeps `fraction` of its
+    examples in expectation, so the cumulative stages stay nested.
+
+    Raises:
+        ValueError: if `fraction` is not in (0, 1].
+    """
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError(f"fraction must be in (0, 1], got {fraction}")
+    if fraction == 1.0:
+        return stages
+    base = stages[-1].train_subset.dataset
+    keep = torch.rand(len(base), generator=torch.Generator().manual_seed(seed)) < fraction  # ty: ignore[invalid-argument-type]
+    return [
+        Stage(
+            stage.index,
+            stage.digits_seen,
+            Subset(base, [i for i in stage.train_subset.indices if keep[i]]),
+            stage.test_data,
+        )
+        for stage in stages
+    ]
+
+
+def get_stage_digits(stages: list[Stage]) -> list[list[int]]:
+    """The classes each stage introduces (sorted within a stage), recovered from `digits_seen`."""
+    stage_digits = []
+    seen: frozenset[int] = frozenset()
+    for stage in stages:
+        stage_digits.append(sorted(stage.digits_seen - seen))
+        seen = stage.digits_seen
+    return stage_digits
