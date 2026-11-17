@@ -8,6 +8,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from autapse import reset_inhibition_state
 from data import LabeledDataset
 
 
@@ -15,12 +16,16 @@ from data import LabeledDataset
 def evaluate_per_digit_accuracy(
     model: nn.Module, test_data: LabeledDataset, device: torch.device, batch_size: int = 256
 ) -> dict[int, float]:
-    """Computes test accuracy for each of the 10 digits.
+    """Computes test accuracy for each class present in `test_data` (10 digits, or 20 classes).
+
+    Clears leaky inhibition state first and reads the test set in order, so the result depends
+    only on the model, the test order and `batch_size`.
 
     Covers both forgetting (already-introduced digits) and generalization
     (not-yet-introduced ones), see old-lab-book.md, "Evaluation metrics".
     """
     model.eval()
+    reset_inhibition_state(model, training=False)
     correct: dict[int, int] = defaultdict(int)
     total: dict[int, int] = defaultdict(int)
     loader = DataLoader(cast(Dataset[tuple[torch.Tensor, int]], test_data), batch_size=batch_size)

@@ -12,6 +12,7 @@ from torch import nn
 
 AI2_Variant = Literal["ai2_diff", "ai2_gate"]
 Activation_Scheme = Literal["sigmoid", "relu_sigmoid"]
+LayerKind = Literal["unrolled", "leaky"]
 
 
 class AutapticLayer(nn.Module):
@@ -129,3 +130,102 @@ class AutapticLayer(nn.Module):
         else:
             raise ValueError(f"Unknown ai2 variant {self.ai2_variant}")
         return y_tilde
+
+
+def reset_inhibition_state(model: nn.Module, training: bool | None = None) -> None:
+    """Clears the carried state of every `LeakyLayer` in `model` (no-op for other modules).
+
+    Called with `training=None` (both states) at each stage start and with `training=False`
+    (eval state only) at the start of each evaluation pass, so a stream never leaks inhibition
+    across a stage boundary, and an evaluation neither inherits nor erases the training stream.
+    """
+    for module in model.modules():
+        if isinstance(module, LeakyLayer):
+            module.reset_state(training)
+
+
+class LeakyLayer(nn.Module):
+    """A linear layer whose inhibition is a leaky integral of the preceding samples' signals.
+
+    One forward pass per input (no unroll).
+    The inhibition of sample `i` of the stream is
+    `I_i = (1 - decay) * sum_{k>=1} decay^(k-1) * a_{i-k}`, where `a_j` is the activation signal
+    of the uninhibited output of sample `j` (same scheme handling as `AutapticLayer`), per neuron.
+    The output is gated like `ai2_gate`: `y * (1 - ai2_weight * I)`.
+
+    Within a batch `I` is one matmul with a strictly lower-triangular decay matrix, so sample `i`
+    sees samples before it only, never itself or later ones.
+    The state `I_next` after the last sample is carried to the next batch, detached, so gradients
+    stop at the batch boundary but flow between samples inside a batch.
+    The `(1 - decay)` factor keeps `I` in `[0, 1)` for signals in `[0, 1)`, like `y_self`.
+    Train and eval modes keep separate states, so per-epoch evaluation does not disturb the
+    training stream; see `reset_inhibition_state` for when states are cleared.
+
+    Gotcha: with shuffled training batches neighbouring samples are random classes, so `I` is a
+    running population-level activity estimate; evaluation results depend on test order and
+    batch size.
+
+    Args:
+        in_features: Input dimensionality.
+        out_features: Output dimensionality.
+        activation_scheme: As in `AutapticLayer`; `"relu_sigmoid"` uses `tanh(y / 2)` as signal.
+        decay: Per-sample decay `lambda` in `[0, 1)`; the memory is about `1 / (1 - decay)` samples.
+        ai2_weight: Factor applied to `I` before gating.
+
+    Attributes:
+        last_inhibition: `I` (before the weight factor) of the most recent `forward` call, shape
+            (batch, neurons), detached. `None` until `forward` has run.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        activation_scheme: Activation_Scheme,
+        decay: float = 0.9,
+        ai2_weight: float = 1.0,
+    ) -> None:
+        if not 0.0 <= decay < 1.0:
+            raise ValueError(f"decay must be in [0, 1), got {decay}")
+        if activation_scheme not in ("sigmoid", "relu_sigmoid"):
+            raise ValueError(f"Unknown activation_scheme {activation_scheme}")
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.activation_scheme = activation_scheme
+        self.decay = decay
+        self.ai2_weight = ai2_weight
+        self.last_inhibition: torch.Tensor | None = None
+        self._states: dict[bool, torch.Tensor | None] = {True: None, False: None}
+
+    def reset_state(self, training: bool | None = None) -> None:
+        """Forgets the carried inhibition of train mode, eval mode, or (`None`) both."""
+        for mode in (True, False) if training is None else (training,):
+            self._states[mode] = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = (
+            torch.sigmoid(self.linear(x))
+            if self.activation_scheme == "sigmoid"
+            else torch.relu(self.linear(x))
+        )
+        signal = y if self.activation_scheme == "sigmoid" else torch.tanh(y / 2)
+        inhibition = self._get_inhibition(signal)
+        self.last_inhibition = inhibition.detach()
+        return y * (1 - self.ai2_weight * inhibition)
+
+    def _get_inhibition(self, signal: torch.Tensor) -> torch.Tensor:
+        """`I` for every sample of the batch, and updates the carried state for the next batch."""
+        batch = signal.shape[0]
+        positions = torch.arange(batch, device=signal.device)
+        lag = positions[:, None] - positions[None, :] - 1  # i - j - 1; >= 0 only for j < i
+        decay = torch.tensor(self.decay, dtype=signal.dtype, device=signal.device)
+        weights = torch.where(lag >= 0, decay ** lag.clamp(min=0).to(signal.dtype), 0.0)
+        carried = self._states[self.training]
+        if carried is None:
+            carried = signal.new_zeros(signal.shape[1])
+        inhibition = (1 - self.decay) * (weights @ signal) + (decay ** positions.to(signal.dtype))[
+            :, None
+        ] * carried[None, :]
+        next_state = self.decay * inhibition[-1] + (1 - self.decay) * signal[-1]
+        self._states[self.training] = next_state.detach()
+        return inhibition

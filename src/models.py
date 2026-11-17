@@ -3,7 +3,7 @@
 import torch
 from torch import nn
 
-from autapse import Activation_Scheme, AI2_Variant, AutapticLayer
+from autapse import Activation_Scheme, AI2_Variant, AutapticLayer, LayerKind, LeakyLayer
 
 
 class FCNN_AI2(nn.Module):
@@ -18,6 +18,10 @@ class FCNN_AI2(nn.Module):
         activation_scheme: Activation scheme, see `autapse.AutapticLayer`.
         hidden_sizes: Output width of each hidden `AutapticLayer`, in order.
         ai2_weight: Inhibition weight of every hidden layer, see `autapse.AutapticLayer`.
+        num_classes: Output width.
+        layer_kind: "unrolled" for `AutapticLayer`s, "leaky" for `LeakyLayer`s (ignores `T` and
+            `ai2_variant`; the leaky layer is always the gate form).
+        decay: Decay of the `LeakyLayer`s.
     """
 
     def __init__(
@@ -27,14 +31,22 @@ class FCNN_AI2(nn.Module):
         activation_scheme: Activation_Scheme,
         hidden_sizes: tuple[int, ...] = (256, 128),
         ai2_weight: float = 1.0,
+        num_classes: int = 10,
+        layer_kind: LayerKind = "unrolled",
+        decay: float = 0.9,
     ) -> None:
         super().__init__()
         layer_sizes = (28 * 28, *hidden_sizes)
+        pairs = list(zip(layer_sizes, hidden_sizes))
         self.hidden_layers = nn.ModuleList(
-            AutapticLayer(in_features, out_features, T, ai2_variant, activation_scheme, ai2_weight)
-            for in_features, out_features in zip(layer_sizes, hidden_sizes)
+            LeakyLayer(in_features, out_features, activation_scheme, decay, ai2_weight)
+            if layer_kind == "leaky"
+            else AutapticLayer(
+                in_features, out_features, T, ai2_variant, activation_scheme, ai2_weight
+            )
+            for in_features, out_features in pairs
         )
-        self.output = nn.Linear(hidden_sizes[-1], 10)
+        self.output = nn.Linear(hidden_sizes[-1], num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.view(x.shape[0], -1)
@@ -50,15 +62,16 @@ class CNN(nn.Module):
         channels: Output channel count of (conv1, conv2), in order. Shrinking
             this is the CNN control's equivalent of FCNN_AI2's `hidden_sizes`
             for the network-size scan (see `size_scan.py`).
+        num_classes: Output width.
     """
 
-    def __init__(self, channels: tuple[int, int] = (16, 32)) -> None:
+    def __init__(self, channels: tuple[int, int] = (16, 32), num_classes: int = 10) -> None:
         super().__init__()
         conv1_channels, conv2_channels = channels
         self.conv1 = nn.Conv2d(1, conv1_channels, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(conv1_channels, conv2_channels, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2)
-        self.output = nn.Linear(conv2_channels * 7 * 7, 10)
+        self.output = nn.Linear(conv2_channels * 7 * 7, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool(torch.relu(self.conv1(x)))

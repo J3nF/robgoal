@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
+from autapse import reset_inhibition_state
 from data import Stage
 from metrics import evaluate_per_digit_accuracy
 
@@ -45,6 +46,7 @@ def run_incremental_training(
 
     accuracy_by_stage = []
     for stage in stages:
+        reset_inhibition_state(model)
         loader = DataLoader(stage.train_subset, batch_size=batch_size, shuffle=True)
         for epoch_index in range(epochs_per_stage):
             batch_callback = (
