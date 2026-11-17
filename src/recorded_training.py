@@ -16,6 +16,12 @@ from torch import nn
 
 from data import LabeledDataset, Stage
 from dynamics_insights import get_y_self_absmeans, get_y_self_per_neuron
+from inhibition_recording import (
+    InhibitionRecord,
+    build_inhibition_arrays,
+    record_test_stage,
+    record_train_batch,
+)
 from metrics import evaluate_per_digit_accuracy
 from run_config import RunConfig
 from run_store import RunArray
@@ -57,6 +63,7 @@ class TrainingRecord:
             `config.capture_y_self_per_epoch`.
         y_self_per_neuron_batch: Per layer name, one per-neuron row per training batch; empty
             unless `config.capture_y_self_per_batch`.
+        inhibition: Per-layer inhibition scalars, see `inhibition_recording`.
         train_seconds: Wall-clock training time.
     """
 
@@ -66,6 +73,7 @@ class TrainingRecord:
     y_self_absmean: dict[str, list[float]] = field(default_factory=dict)
     y_self_per_neuron_epoch: dict[str, list[list[float]]] = field(default_factory=dict)
     y_self_per_neuron_batch: dict[str, list[list[float]]] = field(default_factory=dict)
+    inhibition: InhibitionRecord = field(default_factory=InhibitionRecord)
     train_seconds: float = 0.0
 
 
@@ -84,7 +92,10 @@ def train_and_record(
     hooks = hooks if hooks is not None else TrainingHooks()
     record = TrainingRecord()
     on_batch_end = _chain_batch(
-        _make_batch_recorder(model, record) if config.capture_y_self_per_batch else None,
+        _chain_batch(
+            _make_batch_recorder(model, record) if config.capture_y_self_per_batch else None,
+            _make_inhibition_batch_recorder(model, record),
+        ),
         hooks.on_batch_end,
     )
     start_time = time.perf_counter()
@@ -102,23 +113,34 @@ def train_and_record(
             ),
             _make_epoch_evaluator(model, record, stages[0].test_data, device),
         ),
-        on_stage_end=_chain_stage(_make_stage_recorder(record), hooks.on_stage_end),
+        on_stage_end=_chain_stage(
+            _chain_stage(
+                _make_stage_recorder(record),
+                _make_inhibition_stage_recorder(
+                    model, record, stages[0].test_data, device, config.num_classes
+                ),
+            ),
+            hooks.on_stage_end,
+        ),
         on_batch_end=on_batch_end,
     )
     record.train_seconds = time.perf_counter() - start_time
     return record
 
 
-def build_arrays(record: TrainingRecord) -> dict[str, RunArray]:
+def build_arrays(record: TrainingRecord, num_classes: int = NUM_DIGITS) -> dict[str, RunArray]:
     """The datasets a run file stores for `record`, keyed by dataset path.
 
     `accuracy` is (epoch, digit), evaluated on the full test set after every epoch; the per-layer
     datasets exist only for models with AutapticLayers (the CNN has none).
     """
     arrays = {
-        "accuracy": RunArray(_to_accuracy_matrix(record.accuracy_by_epoch), ("epoch", "digit")),
+        "accuracy": RunArray(
+            _to_accuracy_matrix(record.accuracy_by_epoch, num_classes), ("epoch", "digit")
+        ),
         "train_loss": RunArray(np.asarray(record.train_loss, dtype=np.float64), ("epoch",)),
     }
+    arrays.update(build_inhibition_arrays(record.inhibition))
     for layer, values in record.y_self_absmean.items():
         arrays[f"y_self_absmean/{layer}"] = RunArray(
             np.asarray(values, dtype=np.float64), ("epoch",)
@@ -134,8 +156,10 @@ def build_arrays(record: TrainingRecord) -> dict[str, RunArray]:
     return arrays
 
 
-def _to_accuracy_matrix(accuracy_by_epoch: list[dict[int, float]]) -> np.ndarray:
-    matrix = np.full((len(accuracy_by_epoch), NUM_DIGITS), np.nan, dtype=np.float64)
+def _to_accuracy_matrix(
+    accuracy_by_epoch: list[dict[int, float]], num_classes: int = NUM_DIGITS
+) -> np.ndarray:
+    matrix = np.full((len(accuracy_by_epoch), num_classes), np.nan, dtype=np.float64)
     for epoch_index, per_digit in enumerate(accuracy_by_epoch):
         for digit, accuracy in per_digit.items():
             matrix[epoch_index, digit] = accuracy
@@ -189,6 +213,32 @@ def _make_batch_recorder(model: nn.Module, record: TrainingRecord) -> BatchCallb
         _append_rows(record.y_self_per_neuron_batch, get_y_self_per_neuron(model))
 
     return on_batch_end
+
+
+def _make_inhibition_batch_recorder(model: nn.Module, record: TrainingRecord) -> BatchCallback:
+    """Callback recording each inhibiting layer's batch mean and variance (mutates `record`)."""
+
+    def on_batch_end(stage_index: int, epoch_index: int, batch_index: int) -> None:
+        del epoch_index, batch_index
+        record_train_batch(model, record.inhibition, stage_index)
+
+    return on_batch_end
+
+
+def _make_inhibition_stage_recorder(
+    model: nn.Module,
+    record: TrainingRecord,
+    test_data: LabeledDataset,
+    device: torch.device,
+    num_classes: int,
+) -> StageCallback:
+    """Callback running the stage-end test pass of the inhibition signals (mutates `record`)."""
+
+    def on_stage_end(stage_index: int, per_digit_accuracy: dict[int, float]) -> None:
+        del stage_index, per_digit_accuracy
+        record_test_stage(model, record.inhibition, test_data, device, num_classes)
+
+    return on_stage_end
 
 
 def _make_stage_recorder(record: TrainingRecord) -> StageCallback:
