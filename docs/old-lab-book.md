@@ -328,3 +328,20 @@ Because the order differs per seed, the seed-averaged heatmap by label blurs the
 
 Backward-transfer axes are signed, so they span the data range (negative values included) instead of starting at 0; the plotting rule "axes start at 0" is deviated from there on purpose, and the figure titles say so.
 Heatmaps use one fixed 0-1 colour range.
+
+### Exhaustive Results: Does W = 12 Still Sit in the Transition? (5 Epochs per Stage)
+
+The pilot ran 1 epoch per stage, so the width choice needed a check at the 5 epochs of the exhaustive runs.
+The FCNN control (`relu_sigmoid`) at W = 12 has $D = -0.021$ with a 95 % interval of $[-0.058, +0.016]$ on MNIST (launch `2026-11-17-16-00_ef03c45`).
+That interval straddles both thresholds of the definition above ($-0.05$ for present, $-0.02$ for absent), so interference is neither clearly present nor absent: W = 12 is still in the transition region (p=70%, from the one interval; 5 seeds).
+On FashionMNIST the interval is $[-0.099, -0.010]$ (launch `2026-11-17-16-44_ef03c45`) and on the mixed protocol $[-0.052, -0.026]$ (launch `2026-11-17-17-28_ef03c45`).
+Neither is below $-0.05$ as a whole, so under the stated definition neither counts as "present" either.
+An earlier reading of the FashionMNIST interval as "interference present" used a $-0.01$ threshold that is not part of the definition, and was dropped.
+
+Notice that the width was chosen on MNIST only; the other two datasets were run at the same $W$ without their own pilot (a choice, not a result).
+
+The sigmoid question from the pilot is partly answered.
+At 5 epochs the plain `sigmoid` FCNN control learns (accuracy 0.65 MNIST, 0.71 FashionMNIST, 0.80 mixed), so its floor in the pilot came from the 1-epoch setting.
+The unrolled and leaky `sigmoid` layers stay at chance on MNIST and FashionMNIST, and the leaky ones also on mixed, while the unrolled `sigmoid` gate learns on mixed (0.61).
+One possible reason (?) is that the `sigmoid` activation lies in $(0, 1)$ with mean about 0.5, so the inhibition signal is near 0.5 everywhere (measured: 0.5 in the leaky layers) and halves every output; no test of this reason was run.
+The positive $D$ of the learning `sigmoid` models comes from low accuracy at introduction (mean newest-class accuracy 0.36 to 0.51 against 0.89 to 0.95 for `relu_sigmoid`), not from retained knowledge.

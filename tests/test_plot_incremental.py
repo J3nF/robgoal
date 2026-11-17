@@ -242,3 +242,7 @@ def test_width_text_and_rank_marks_follow_the_stage_digits(runs) -> None:
     marks = np.asarray(fig.axes[0].collections[0].get_offsets())[:, 1]
     assert marks[:3].tolist() == [0, 1, 2]  # rank r enters in stage r with one epoch per stage
     assert "width 4" in fig.get_suptitle()
+
+
+def test_row_limits_of_no_cells_are_empty() -> None:
+    assert pi.get_row_limits([], "mean") == {}

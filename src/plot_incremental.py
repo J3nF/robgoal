@@ -225,6 +225,8 @@ def _plot_cell_heatmap(cell: Cell, ax: Axes, mixed: bool, by_rank: bool) -> None
         colorbar=False,
     )
     ax.tick_params(labelsize="xx-small")
+    if by_rank:
+        ax.set_xlabel("introduction rank")
     if num_classes > 12:
         for label in ax.get_xticklabels()[1::2]:
             label.set_visible(False)
@@ -279,7 +281,7 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
         high = max(high, float(np.nanmax(bwt.mean(axis=0) + bwt.std(axis=0))))
     axes[0].set_ylim(0, 1)
     axes[0].set_ylabel("accuracy, newest class (0-1)")
-    axes[1].set_ylim(low * 1.05, high * 1.05)
+    axes[1].set_ylim(max(low * 1.05, -1.0), high * 1.05)  # -1 is the lowest possible value
     axes[1].axhline(0, color="gray", linewidth=0.6)
     axes[1].set_ylabel("backward transfer (accuracy change)")
     for ax in axes:
@@ -338,7 +340,7 @@ def get_row_limits(cells: list[Cell], statistic: str) -> dict[str, float]:
             series = _eval_series(cell, layer, statistic)
             top = max(top, float((series.mean(0) + series.std(0)).max()))
             limits[layer] = top
-    overall = max(limits.values())
+    overall = max(limits.values(), default=0.0)
     return dict.fromkeys(limits, overall)
 
 
@@ -383,12 +385,14 @@ def plot_inhibition_grid(
     axes[-1, 1].set_xlabel("stage (test set, after the stage)", fontsize="x-small")
     axes[0, 0].set_title("training", fontsize="small")
     axes[0, 1].set_title("test", fontsize="small")
-    fig.colorbar(
+    colorbar = fig.colorbar(
         ScalarMappable(Normalize(0, num_stages - 1), cmap="viridis"),
         ax=axes.ravel().tolist(),
         label="stage",
         shrink=0.8,
     )
+    colorbar.locator = MaxNLocator(integer=True)
+    colorbar.update_ticks()
     fig.suptitle(
         f"{tag}: inhibition {statistic} per layer, {cell.label}, {dataset}, "
         f"{get_width_text([cell])}, mean +/- std over {num_seeds} seeds; "
