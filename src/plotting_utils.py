@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
 
 from run_store import RunFile, list_runs
 
@@ -279,6 +280,7 @@ def plot_class_time_heatmap(
         ax.figure.colorbar(image, ax=ax, label="test accuracy (0-1)")
     ax.set_xlabel("class")
     ax.set_ylabel("epoch (time)")
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xticks(range(num_classes))
     ax.set_xticklabels(
         class_labels if class_labels is not None else [str(c) for c in range(num_classes)]

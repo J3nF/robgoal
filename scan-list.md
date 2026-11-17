@@ -119,6 +119,20 @@ uv run python src/plot_weight_scan.py results/<launch_id_mnist> results/<launch_
 `weight_scan_summary.csv` and `q2_tests.csv` (`--out DIR` to change). Runs written before
 per-epoch evaluation (`accuracy` with dims `(stage, digit)`) are refused.
 
+## 7. Width pilot and incremental-inhibition scans
+
+`--scan width` runs the FCNN controls (`T=1`, both schemes) and the CNN control with matched
+channels (`incremental_scan.matched_channels`) at each `--widths` value (four equal hidden layers);
+`src/pilot_width.py results/<launch_id>` applies the interference rule and prints the chosen width.
+`--scan incremental --width W [--leaky-decays 0.9 0.5 0.99]` runs, at one width, the CNN control,
+both FCNN controls, the unrolled `ai2_gate` (`T=5`, weight 1) and the leaky layers
+(`autapse.LeakyLayer`, one per decay and scheme).
+`--dataset mixed` is the 20-class MNIST plus FashionMNIST protocol (random class order per seed).
+Coarse runs add `--epochs-per-stage 1` and, for `mixed`, `--train-fraction 0.25`;
+`--split-seeds` makes every seed its own job so all `--workers` stay busy.
+Figures: `uv run python src/plot_incremental.py results/<launch_id>... --out-dir results/plots/<topic> --tag coarse`.
+Run launches from a clean checkout that no editing touches: the launcher re-checks the git tree before every job.
+
 ## Looking at runs
 
 ```python

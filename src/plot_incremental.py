@@ -22,6 +22,7 @@ from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
 
 import plotting_utils as pu
 from data import MIXED_FASHION_OFFSET
@@ -168,7 +169,7 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
     for cell, ax in zip(cells, axes.flat):
         ax.set_visible(True)
         _plot_cell_heatmap(cell, ax, mixed, by_rank)
-        ax.set_title(cell.label, fontsize="x-small")
+        ax.set_title(cell.label, fontsize="x-small", pad=14 if mixed and not by_rank else 4)
     if by_rank and mixed:
         share = np.mean(
             [
@@ -181,10 +182,7 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
         strip.set_visible(True)
         strip.imshow(share[None, :], aspect="auto", cmap="viridis", vmin=0, vmax=1)
         strip.set_yticks([])
-        strip.set_xlabel(
-            "introduction rank; strip = share of seeds with a MNIST class (1) vs FashionMNIST (0)",
-            fontsize="x-small",
-        )
+        strip.set_xlabel("rank; strip: share of seeds with MNIST class", fontsize="x-small")
     sm = ScalarMappable(Normalize(0, 1), cmap="viridis")
     fig.colorbar(sm, ax=axes[:rows].ravel().tolist(), label="test accuracy (0-1)", shrink=0.8)
     order = "by introduction rank" if by_rank else "by class label"
@@ -261,7 +259,7 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
     num_seeds = len(cells[0].runs)
     styles = get_styles(cells)
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.4), sharex=True)
-    low = 0.0
+    low, high = 0.0, 0.05
     for cell in cells:
         accuracy, bwt = get_newest_class_curves(cell)
         stages = np.arange(accuracy.shape[1])
@@ -278,13 +276,15 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
                 **styles[cell.label],
             )
         low = min(low, float(np.nanmin(bwt.mean(axis=0) - bwt.std(axis=0))))
+        high = max(high, float(np.nanmax(bwt.mean(axis=0) + bwt.std(axis=0))))
     axes[0].set_ylim(0, 1)
     axes[0].set_ylabel("accuracy, newest class (0-1)")
-    axes[1].set_ylim(low * 1.05, max(0.0, 0.05))
+    axes[1].set_ylim(low * 1.05, high * 1.05)
     axes[1].axhline(0, color="gray", linewidth=0.6)
     axes[1].set_ylabel("backward transfer (accuracy change)")
     for ax in axes:
         ax.set_xlabel("stage (one new class per stage)")
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.tick_params(labelsize="x-small")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
@@ -374,6 +374,7 @@ def plot_inhibition_grid(
         axes[row, 0].set_ylabel(f"{layer}\n{statistic}", fontsize="x-small")
         axes[row, 0].tick_params(labelsize="xx-small")
         axes[row, 1].tick_params(labelsize="xx-small")
+        axes[row, 1].xaxis.set_major_locator(MaxNLocator(integer=True))
     axes[-1, 0].set_xlabel("training batch within the stage (all epochs)", fontsize="x-small")
     axes[-1, 1].set_xlabel("stage (test set, after the stage)", fontsize="x-small")
     axes[0, 0].set_title("training", fontsize="small")

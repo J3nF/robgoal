@@ -272,7 +272,7 @@ Wish: one width $W$ for four equal hidden layers, where the ai2 effect is neithe
 Pilot launch `2026-11-17-14-54_02ca940`: FCNN controls (T=1, both schemes) and matched CNN controls at $W \in \{2, 4, 8, 16, 32, 64, 128\}$, MNIST, 1 initial class, 1 class per stage, 5 seeds, 1 epoch per stage.
 The first attempt (`2026-11-17-14-47_6996f49`) was aborted because the working tree was edited during the launch; it is not used.
 
-Definition, fixed before the pilot ran (agent decision, unconfirmed; the researcher asked for a quantitative definition but did not fix one):
+Definition, written down in the agent's plan before the first pilot launch (the analysis code `pilot_width.py` was committed only after that launch had started, and a fallback was added after seeing the results; agent decision, unconfirmed; the researcher asked for a quantitative definition but did not fix one):
 
 - $D$ is the last value of `metrics.backward_transfer_over_time`: the mean over classes introduced before the last stage of the final accuracy minus the accuracy at the end of the introducing stage.
 - Interference is present at a width if the whole 95 % t-interval of $D$ over 5 seeds lies below $-0.05$.
