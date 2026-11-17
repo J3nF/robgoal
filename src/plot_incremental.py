@@ -245,7 +245,7 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
     """Newest-class accuracy and backward transfer per stage, all models in the same axes."""
     num_seeds = len(cells[0].runs)
     styles = get_styles(cells)
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 2.8), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.4), sharex=True)
     low = 0.0
     for cell in cells:
         accuracy, bwt = get_newest_class_curves(cell)
@@ -264,18 +264,18 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
             )
         low = min(low, float(np.nanmin(bwt.mean(axis=0) - bwt.std(axis=0))))
     axes[0].set_ylim(0, 1)
-    axes[0].set_ylabel("accuracy on the class introduced in the stage (0-1)")
+    axes[0].set_ylabel("accuracy, newest class (0-1)")
     axes[1].set_ylim(low * 1.05, max(0.0, 0.05))
     axes[1].axhline(0, color="gray", linewidth=0.6)
-    axes[1].set_ylabel("backward transfer at the stage end (accuracy change, old classes)")
+    axes[1].set_ylabel("backward transfer (accuracy change)")
     for ax in axes:
         ax.set_xlabel("stage (one new class per stage)")
         ax.tick_params(labelsize="x-small")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
     fig.suptitle(
-        f"{tag}: newest class per stage, {dataset}, mean +/- std over {num_seeds} seeds "
-        "(backward-transfer axis spans the data range, linear)",
+        f"{tag}: newest class per stage, {dataset}, mean +/- std over {num_seeds} seeds; "
+        "BWT axis linear, spans the data",
         fontsize="small",
     )
     return fig
@@ -420,7 +420,7 @@ def plot_inhibition_eval_comparison(cells: list[Cell], dataset: str, tag: str) -
 
 def _save(fig: Figure, directory: Path, name: str) -> None:
     for suffix in ("png", "pdf"):
-        pu.save_figure(fig, directory / f"{name}.{suffix}", dpi=SAVE_DPI)
+        pu.save_figure(fig, directory / f"{name}.{suffix}", dpi=SAVE_DPI, transparent=False)
     plt.close(fig)
     print(f"saved {directory / name}.png")
 
