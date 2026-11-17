@@ -1,6 +1,6 @@
 # Meeting Summary: Incremental Autaptic-Inhibition Experiments
 
-Status at the end of Phase 1 (all runs coarse; exhaustive runs are planned in Phase 2 and not yet run).
+Status: Phase 1 (coarse) is complete; the exhaustive launch for MNIST is finished and FashionMNIST and the mixed protocol are still running (see "Phase 2" below).
 Setup: width 12, four equal hidden layers, class-incremental protocol with 1 initial class and 1 class per stage, 5 random seeds shared by all models of a launch, 1 epoch per stage.
 The mixed protocol additionally uses 25 % of every stage's training examples.
 Every figure title says "coarse"; paths are relative to the repository root.
@@ -25,6 +25,25 @@ Every figure title says "coarse"; paths are relative to the repository root.
 | 6 | 2.3 Leaky layer versus unrolled gate | same files as 5 and 2 | Leaky inhibition (λ=0.9) lowers final accuracy (MNIST 0.858 versus 0.916) and keeps backward transfer at or above 0 (+0.018 MNIST, −0.015 FashionMNIST, versus −0.019 and −0.040 for the unrolled gate). | the three launches above | coarse |
 | 7 | 2.4 Inhibition per layer | `results/plots/coarse/inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, comparison `inhibition_eval_<dataset>.png` | The unrolled gate's inhibition mean falls slowly with stages (0.13 to 0.07 in layer 3 on MNIST); the leaky layer's rises with depth and stages (mixed: 0.06 to 0.31 in layer 3); the `sigmoid` layers sit at a constant value. | the three launches above | coarse |
 
+## Phase 2: Exhaustive Runs (5 Epochs per Stage, Full Training Sets)
+
+Exhaustive MNIST, launch `2026-11-17-16-00_ef03c45` (55 runs, 11 configs: leaky λ = 0.5, 0.9, 0.99 added); figures in `results/plots/exhaustive/` (same file names as the coarse figures, titles say "exhaustive").
+
+| Model (MNIST, width 12, 5 seeds) | Final accuracy (mean ± std) | Final backward transfer D, 95 % interval |
+| --- | --- | --- |
+| CNN control | 0.980 ± 0.008 | −0.006 [−0.014, +0.002] |
+| FCNN control, `relu_sigmoid` | 0.934 ± 0.017 | −0.021 [−0.058, +0.016] |
+| Unrolled `ai2_gate`, `relu_sigmoid` | 0.934 ± 0.003 | −0.027 [−0.034, −0.021] |
+| Leaky λ=0.5 / 0.9 / 0.99, `relu_sigmoid` | 0.882 / 0.916 / 0.924 | −0.032 / −0.032 / −0.029 |
+| FCNN control, `sigmoid` | 0.649 ± 0.046 | +0.248 [+0.025, +0.471] |
+| Unrolled `ai2_gate`, `sigmoid` | 0.105 ± 0.011 | −0.127 [−0.246, −0.009] |
+| Leaky, `sigmoid` (all λ) | 0.100 | −0.111 |
+
+- At 5 epochs the plain `sigmoid` FCNN control does learn (accuracy 0.65), but the unrolled gate and the leaky layers with `sigmoid` stay at chance: inhibition with this scheme prevents training at width 12 here.
+- With `relu_sigmoid`, the unrolled gate and the leaky layers are not more robust than the FCNN control (backward transfer −0.03 against −0.02, intervals overlap), and larger λ gives higher final accuracy (0.88 to 0.92).
+- The FCNN control's interval at W=12 straddles the "present" and "absent" thresholds of the pilot (−0.05 and −0.02), so at 5 epochs interference is neither clearly present nor absent, consistent with the width being in the transition region.
+- The positive backward transfer of the `sigmoid` control (+0.25) is an artefact of near-chance accuracy at introduction.
+
 ## What Was Run
 
 - Pilot: 7 widths × (2 FCNN controls + 1 CNN control) × 5 seeds, 1 epoch per stage, MNIST (105 runs).
@@ -34,4 +53,5 @@ Every figure title says "coarse"; paths are relative to the repository root.
 
 ## Next
 
-The plan for the exhaustive launches (5 epochs, extra decay values, regenerated figures in `results/plots/exhaustive/`) is in `docs/exhaustive-plan.md`.
+The plan and its red-team record are in `docs/exhaustive-plan.md`.
+The mixed exhaustive launch (full data) is estimated at 6 to 8 hours and is the last in the chain.
