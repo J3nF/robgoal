@@ -18,9 +18,10 @@ from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, 
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import incremental_scan
 import size_scan
 import sweep
-from data import DatasetName
+from data import NUM_CLASSES, DatasetName
 from experiment_jobs import (
     Job,
     JobOutcome,
@@ -34,6 +35,7 @@ from experiment_jobs import (
 from run_config import MlflowSettings, RunConfig
 from run_store import (
     DirtyTreeError,
+    Launch,
     LaunchExistsError,
     LaunchSpec,
     begin_launch,
@@ -66,6 +68,8 @@ SCAN_BUILDERS: dict[str, Callable[[], list[RunConfig]]] = {
     "size": size_scan.build_size_scan_configs,
     "weights": sweep.build_weight_scan_configs,
 }
+# Scans that need extra command-line parameters, built by `_build_scan_configs`.
+PARAMETRIC_SCANS = ("width", "incremental")
 
 
 def _default_mlflow_settings() -> MlflowSettings:
@@ -104,6 +108,9 @@ class LaunchRequest:
     workers: int = 1
     use_mlflow: bool = True
     command: str = ""
+    epochs_per_stage: int | None = None
+    train_fraction: float = 1.0
+    split_seeds: bool = False
 
 
 def main(
@@ -176,7 +183,7 @@ def _make_request(arguments: dict, command: str | None, function: str) -> Launch
     Without an explicit `command`, the recorded command is a description of the call.
     """
     fields = {f.name for f in dataclasses.fields(LaunchRequest)} - {"command"}
-    values = {key: arguments[key] for key in fields}
+    values = {key: arguments[key] for key in fields if key in arguments}
     if command is None:
         shown = dict(values)
         for key in ("hidden_sizes_scan", "channels_scan"):
@@ -212,20 +219,41 @@ def run_launch(configs: list[RunConfig], request: LaunchRequest, scan: str, env:
     launch = begin_launch(
         spec, results_root=env.results_root, lab_book=env.lab_book, repo_root=env.repo_root
     )
-    jobs = [
-        Job(
-            config,
-            seeds,
-            launch,
-            mlflow=settings,
-            stage_builder=env.stage_builder,
-            verbose=request.workers == 1,
-        )
-        for config, seeds in plan
-    ]
+    jobs = _make_jobs(plan, launch, settings, env, request)
     print(f"Launch {launch.launch_id}: {spec.planned_runs} runs -> {launch.directory}")
     _raise_if_problems(execute_jobs(jobs, request.workers))
     print(f"Launch {launch.launch_id}: done.")
+
+
+def _make_jobs(
+    plan: list[tuple[RunConfig, tuple[int, ...]]],
+    launch: Launch,
+    settings: MlflowSettings | None,
+    env: LaunchEnv,
+    request: LaunchRequest,
+) -> list[Job]:
+    """One job per config, or one per config and seed with `request.split_seeds`.
+
+    Splitting gives a launch with few configs enough jobs to keep every worker busy; split jobs
+    carry the total seed count so run names keep their seed suffix, and they are not grouped
+    into an MLflow parent run.
+    """
+    jobs = []
+    for config, seeds in plan:
+        groups = [(seed,) for seed in seeds] if request.split_seeds else [seeds]
+        for group in groups:
+            jobs.append(
+                Job(
+                    config,
+                    group,
+                    launch,
+                    mlflow=settings,
+                    stage_builder=env.stage_builder,
+                    verbose=request.workers == 1,
+                    num_seeds=len(seeds) if request.split_seeds else None,
+                )
+            )
+    return jobs
 
 
 def plan_jobs(
@@ -246,7 +274,12 @@ def plan_jobs(
             dataset=request.dataset,
             initial_classes=request.initial_classes,
             classes_per_stage=request.classes_per_stage,
+            num_classes=NUM_CLASSES[request.dataset],
+            shuffle_class_order=request.dataset == "mixed",
+            train_fraction=request.train_fraction,
         )
+        if request.epochs_per_stage is not None:
+            full = dataclasses.replace(full, epochs_per_stage=request.epochs_per_stage)
         seeds = tuple(_draw_seeds(request.num_seeds))
         for seed in seeds:
             name = build_seed_variant(full, seed, len(seeds)).name
@@ -311,7 +344,7 @@ def execute_jobs(jobs: list[Job], workers: int) -> list[JobOutcome]:
         for name, outcome in outcomes.items():
             mlflow_errors.setdefault(name, []).extend(outcome.mlflow_errors)
             final[name] = outcome
-        pending = [job for job in pending if outcomes[job.config.name].error is not None]
+        pending = [job for job in pending if outcomes[job.key].error is not None]
         if not pending:
             break
     return [
@@ -329,7 +362,7 @@ def _run_round(jobs: list[Job], workers: int, skip_existing: bool) -> dict[str, 
     the others down a second time.
     """
     if workers == 1:
-        return {job.config.name: run_job(job, skip_existing) for job in jobs}
+        return {job.key: run_job(job, skip_existing) for job in jobs}
     max_workers = min(workers, len(jobs))
     if skip_existing:
         with ThreadPoolExecutor(max_workers=max_workers) as threads:
@@ -348,9 +381,9 @@ def _collect(futures: dict[Future[JobOutcome], Job]) -> dict[str, JobOutcome]:
     for done, future in enumerate(as_completed(futures), start=1):
         job = futures[future]
         outcome = _outcome_of(future, job)
-        outcomes[job.config.name] = outcome
+        outcomes[job.key] = outcome
         status = "FAILED" if outcome.error else "ok"
-        print(f"[{done}/{len(futures)}] {job.config.name}: {status}", flush=True)
+        print(f"[{done}/{len(futures)}] {job.key}: {status}", flush=True)
     return outcomes
 
 
@@ -367,7 +400,7 @@ def _outcome_of(future: Future[JobOutcome], job: Job) -> JobOutcome:
     try:
         return future.result()
     except Exception as exc:  # noqa: BLE001 -- any worker failure becomes a reported outcome
-        return JobOutcome(job.config.name, f"worker failed: {type(exc).__name__}: {exc}")
+        return JobOutcome(job.key, f"worker failed: {type(exc).__name__}: {exc}")
 
 
 def _raise_if_problems(outcomes: list[JobOutcome]) -> None:
@@ -409,19 +442,77 @@ def _positive_int(text: str) -> int:
     return value
 
 
+def _fraction(text: str) -> float:
+    value = float(text)
+    if not 0.0 < value <= 1.0:
+        raise argparse.ArgumentTypeError(f"must be in (0, 1], got {value}")
+    return value
+
+
+def _build_scan_configs(args: argparse.Namespace) -> list[RunConfig]:
+    """The configs of the scan named in `args`.
+
+    Raises:
+        ValueError: if the 'incremental' scan is chosen without `--width`.
+    """
+    if args.scan == "width":
+        return incremental_scan.build_width_pilot_configs(tuple(args.widths))
+    if args.scan == "incremental":
+        if args.width is None:
+            raise ValueError("--scan incremental needs --width")
+        return incremental_scan.build_incremental_configs(args.width, tuple(args.leaky_decays))
+    return SCAN_BUILDERS[args.scan]()
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scan",
-        choices=list(SCAN_BUILDERS),
+        choices=[*SCAN_BUILDERS, *PARAMETRIC_SCANS],
         default="sweep",
         help="'sweep' (default): sweep.py's 14 configs. 'size': size_scan.py's "
-        "shrinking-network scan. 'weights': sweep.py's ai2_weight scan (28 configs).",
+        "shrinking-network scan. 'weights': sweep.py's ai2_weight scan (28 configs). "
+        "'width': FCNN and CNN controls over --widths (size pilot). 'incremental': controls, "
+        "unrolled ai2_gate and leaky layers at --width.",
     )
     parser.add_argument("--num-seeds", type=int, default=NUM_SEEDS)
-    parser.add_argument("--dataset", choices=["mnist", "fashion_mnist"], default="mnist")
+    parser.add_argument("--dataset", choices=list(NUM_CLASSES), default="mnist")
     parser.add_argument("--initial-classes", type=int, default=5)
     parser.add_argument("--classes-per-stage", type=int, default=1)
+    parser.add_argument(
+        "--epochs-per-stage",
+        type=_positive_int,
+        default=None,
+        help="Override every config's epochs per stage (coarse runs use 1).",
+    )
+    parser.add_argument(
+        "--train-fraction",
+        type=_fraction,
+        default=1.0,
+        help="Keep this fraction of every stage's training examples (coarse runs only).",
+    )
+    parser.add_argument(
+        "--split-seeds",
+        action="store_true",
+        help="Run every seed as its own job, so launches with few configs use all workers.",
+    )
+    parser.add_argument(
+        "--widths",
+        type=_positive_int,
+        nargs="+",
+        default=list(incremental_scan.PILOT_WIDTHS),
+        help="Hidden widths of the 'width' scan.",
+    )
+    parser.add_argument(
+        "--width", type=_positive_int, default=None, help="Hidden width of the 'incremental' scan."
+    )
+    parser.add_argument(
+        "--leaky-decays",
+        type=float,
+        nargs="+",
+        default=list(incremental_scan.DEFAULT_LEAKY_DECAYS),
+        help="Decays of the leaky layers in the 'incremental' scan.",
+    )
     parser.add_argument(
         "--workers",
         type=_positive_int,
@@ -460,9 +551,12 @@ def _cli() -> int:
         workers=args.workers,
         use_mlflow=not args.no_mlflow,
         command="python " + shlex.join(sys.argv),
+        epochs_per_stage=args.epochs_per_stage,
+        train_fraction=args.train_fraction,
+        split_seeds=args.split_seeds,
     )
-    configs = SCAN_BUILDERS[args.scan]()
     try:
+        configs = _build_scan_configs(args)
         run_launch(configs, request, args.scan, LaunchEnv())
     except (ValueError, DirtyTreeError, LaunchExistsError) as exc:
         print(f"error: {exc}", file=sys.stderr)

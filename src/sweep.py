@@ -194,7 +194,21 @@ def build_model(config: RunConfig) -> nn.Module:
     guard against a malformed `RunConfig`, not an expected input.
     """
     if config.model_kind == "cnn":
-        return CNN(channels=config.channels) if config.channels is not None else CNN()
+        channels = config.channels if config.channels is not None else (16, 32)
+        return CNN(channels=channels, num_classes=config.num_classes)
+    if config.layer_kind == "leaky":
+        assert config.activation_scheme is not None
+        assert config.hidden_sizes is not None
+        return FCNN_AI2(
+            T=1,
+            ai2_variant="ai2_gate",
+            activation_scheme=config.activation_scheme,
+            hidden_sizes=config.hidden_sizes,
+            ai2_weight=config.ai2_weight,
+            num_classes=config.num_classes,
+            layer_kind="leaky",
+            decay=config.decay,
+        )
     assert config.T is not None
     assert config.ai2_variant is not None
     assert config.activation_scheme is not None
@@ -205,4 +219,5 @@ def build_model(config: RunConfig) -> nn.Module:
         activation_scheme=config.activation_scheme,
         hidden_sizes=config.hidden_sizes,
         ai2_weight=config.ai2_weight,
+        num_classes=config.num_classes,
     )

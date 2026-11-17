@@ -7,7 +7,7 @@ Split out from `run_experiments.py` so `logged_training.py` can depend on
 from dataclasses import dataclass
 from typing import Literal
 
-from autapse import Activation_Scheme, AI2_Variant
+from autapse import Activation_Scheme, AI2_Variant, LayerKind
 from data import DatasetName
 
 ModelKind = Literal["cnn", "fcnn"]
@@ -46,6 +46,13 @@ class RunConfig:
         capture_y_self_per_batch: Store a per-neuron y_self history dataset in the run file,
             one snapshot per training batch. Opt-in: on a full sweep this can
             produce large files.
+        layer_kind: "unrolled" builds `autapse.AutapticLayer`s, "leaky" builds
+            `autapse.LeakyLayer`s (then `T` is unused and may be `None`).
+        decay: Per-sample decay of the leaky layers; ignored for `layer_kind="unrolled"`.
+        train_fraction: Fraction of every stage's training examples to keep (drawn once per seed),
+            below 1 only for coarse runs.
+        shuffle_class_order: Draw a random class order from the seed instead of 0, 1, 2, ...
+        num_classes: Output width of the model; 20 for the mixed dataset.
     """
 
     name: str
@@ -66,6 +73,11 @@ class RunConfig:
     capture_y_self_per_epoch: bool = False
     capture_y_self_per_batch: bool = False
     ai2_weight: float = 1.0
+    layer_kind: LayerKind = "unrolled"
+    decay: float = 0.9
+    train_fraction: float = 1.0
+    shuffle_class_order: bool = False
+    num_classes: int = 10
 
 
 @dataclass(frozen=True)

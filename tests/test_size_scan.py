@@ -54,6 +54,7 @@ def test_built_fcnn_model_matches_configured_hidden_sizes() -> None:
     fcnn_configs = [c for c in configs if c.model_kind == "fcnn" and c.T != 1]
 
     for config in fcnn_configs:
+        assert config.hidden_sizes is not None
         model = cast(FCNN_AI2, build_model(config))
         hidden_layers = [cast(AutapticLayer, layer) for layer in model.hidden_layers]
         assert [layer.linear.out_features for layer in hidden_layers] == list(config.hidden_sizes)
@@ -64,6 +65,7 @@ def test_built_cnn_model_matches_configured_channels() -> None:
     cnn_configs = [c for c in configs if c.model_kind == "cnn"]
 
     for config in cnn_configs:
+        assert config.channels is not None
         model = cast(CNN, build_model(config))
         assert model.conv1.out_channels == config.channels[0]
         assert model.conv2.out_channels == config.channels[1]

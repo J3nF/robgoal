@@ -19,7 +19,18 @@ import torch
 from torch import nn
 
 import sweep
-from data import DatasetName, Stage, build_stage_digits, build_stages, get_mnist_data
+from data import (
+    NUM_CLASSES,
+    DatasetName,
+    Stage,
+    build_stage_digits,
+    build_stages,
+    get_mnist_data,
+    get_stage_digits,
+    permute_stage_digits,
+    reorder_stages,
+    subsample_stages,
+)
 from metrics import average_accuracy, backward_transfer, format_accuracy_matrix
 from recorded_training import TrainingHooks, TrainingRecord, build_arrays, train_and_record
 from run_config import MlflowSettings, RunConfig
@@ -33,6 +44,7 @@ __all__ = [
     "StageBuilder",
     "build_seed_variant",
     "build_stages_for",
+    "get_seed_stages",
     "init_worker",
     "run_job",
     "run_seed",
@@ -54,7 +66,9 @@ def build_stages_for(
     """
     train_data, test_data = get_mnist_data(root=str(DATA_ROOT), dataset=dataset)
     stage_digits = build_stage_digits(
-        initial_classes=initial_classes, classes_per_stage=classes_per_stage
+        num_classes=NUM_CLASSES[dataset],
+        initial_classes=initial_classes,
+        classes_per_stage=classes_per_stage,
     )
     return build_stages(train_data, test_data, stage_digits=stage_digits)
 
@@ -72,6 +86,8 @@ class Job:
         mlflow: MLflow settings, or `None` for no MLflow.
         stage_builder: Builds the stages inside the worker.
         verbose: Print per-seed summaries and accuracy matrices (sequential launches only).
+        num_seeds: How many seeds the launch has in total when this job runs only some of them
+            (`--split-seeds`), so run names carry the seed suffix; `None` means `len(seeds)`.
     """
 
     config: RunConfig
@@ -80,6 +96,14 @@ class Job:
     mlflow: MlflowSettings | None = None
     stage_builder: StageBuilder = build_stages_for
     verbose: bool = True
+    num_seeds: int | None = None
+
+    @property
+    def key(self) -> str:
+        """Unique job name: the config name, plus the seed when the job is one split-off seed."""
+        if self.num_seeds is None:
+            return self.config.name
+        return f"{self.config.name}#seed{self.seeds[0]}"
 
 
 @dataclass(frozen=True)
@@ -185,7 +209,7 @@ def run_job(job: Job, skip_existing: bool = False) -> JobOutcome:
         raise
     finally:
         session.cleanup(failed=error is not None or interrupted)
-    return JobOutcome(job.config.name, error, tuple(session.errors))
+    return JobOutcome(job.key, error, tuple(session.errors))
 
 
 def _make_session(job: Job) -> TrackingSession:
@@ -203,7 +227,7 @@ def _run_job_seeds(job: Job, skip_existing: bool, session: TrackingSession) -> N
     stages = job.stage_builder(config.dataset, config.initial_classes, config.classes_per_stage)
     replicates = len(job.seeds) > 1
     if job.verbose:
-        print(f"{config.name}: seeds={list(job.seeds)}")
+        print(f"{job.key}: seeds={list(job.seeds)}")
     if replicates:
         session.begin_group(config)
     final_metrics = [run_seed(job, seed, stages, session, skip_existing) for seed in job.seeds]
@@ -222,11 +246,13 @@ def run_seed(
         `(avg_accuracy, backward_transfer)` of the final stage, from the written file when the
         seed was skipped.
     """
-    seed_config = build_seed_variant(job.config, seed, len(job.seeds))
+    num_seeds = job.num_seeds if job.num_seeds is not None else len(job.seeds)
+    seed_config = build_seed_variant(job.config, seed, num_seeds)
     path = job.launch.run_path(seed_config.name)
     if path.exists():
         return _read_existing_metrics(path, skip_existing)
     started_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    stages = get_seed_stages(stages, seed_config)
     torch.manual_seed(seed)
     model = sweep.build_model(seed_config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -242,18 +268,35 @@ def run_seed(
     write_run(
         job.launch,
         seed_config,
-        {**build_arrays(record), **build_trace_arrays(model, stages[-1].test_data, device)},
+        {
+            **build_arrays(record, seed_config.num_classes),
+            **build_trace_arrays(model, stages[-1].test_data, device, seed_config.num_classes),
+        },
         config_name=job.config.name,
         metrics=metrics,
         started_at=started_at,
         device=str(device),
-        extra_meta={"torch_num_threads": torch.get_num_threads()},
+        extra_meta={
+            "torch_num_threads": torch.get_num_threads(),
+            "stage_digits": get_stage_digits(stages),
+        },
     )
     session.log_final(record, metrics)
     if job.verbose:
         print(f"{seed_config.name}: avg_accuracy={avg_acc:.4f} backward_transfer={bwt:+.4f}")
         print(format_accuracy_matrix(record.accuracy_by_stage))
     return avg_acc, bwt
+
+
+def get_seed_stages(stages: list[Stage], config: RunConfig) -> list[Stage]:
+    """The stages one seed trains on: class order and training subset per `config`.
+
+    Both draws depend only on `config.seed`, so a retried seed repeats them exactly.
+    """
+    if config.shuffle_class_order:
+        stage_digits = permute_stage_digits(get_stage_digits(stages), config.seed)
+        stages = reorder_stages(stages, stage_digits)
+    return subsample_stages(stages, config.train_fraction, config.seed)
 
 
 def _read_existing_metrics(path: Path, skip_existing: bool) -> tuple[float, float]:
