@@ -1,6 +1,6 @@
 # Meeting Summary: Incremental Autaptic-Inhibition Experiments
 
-Status: Phase 1 (coarse) is complete; the exhaustive launch for MNIST is finished and FashionMNIST and the mixed protocol are still running (see "Phase 2" below).
+Status: Phase 1 (coarse) is complete; the exhaustive launches for MNIST and FashionMNIST are finished and the mixed protocol (full data, 6 to 8 hours estimated) is still running (see "Phase 2" below).
 Setup: width 12, four equal hidden layers, class-incremental protocol with 1 initial class and 1 class per stage, 5 random seeds shared by all models of a launch, 1 epoch per stage.
 The mixed protocol additionally uses 25 % of every stage's training examples.
 Every figure title says "coarse"; paths are relative to the repository root.
@@ -39,6 +39,18 @@ Exhaustive MNIST, launch `2026-11-17-16-00_ef03c45` (55 runs, 11 configs: leaky 
 | Unrolled `ai2_gate`, `sigmoid` | 0.105 ± 0.011 | −0.127 [−0.246, −0.009] |
 | Leaky, `sigmoid` (all λ) | 0.100 | −0.111 |
 
+Exhaustive FashionMNIST, launch `2026-11-17-16-44_ef03c45` (55 runs), same figure folder (`*_fashion_mnist*`):
+
+| Model (FashionMNIST, width 12, 5 seeds) | Final accuracy (mean ± std) | Final backward transfer D, 95 % interval |
+| --- | --- | --- |
+| CNN control | 0.892 ± 0.003 | −0.021 [−0.045, +0.003] |
+| FCNN control, `relu_sigmoid` | 0.851 ± 0.002 | −0.055 [−0.099, −0.010] |
+| Unrolled `ai2_gate`, `relu_sigmoid` | 0.848 ± 0.005 | −0.055 [−0.094, −0.016] |
+| Leaky λ=0.5 / 0.9 / 0.99, `relu_sigmoid` | 0.780 / 0.838 / 0.834 | −0.067 / −0.062 / −0.028 |
+| FCNN control, `sigmoid` | 0.706 ± 0.060 | +0.172 [−0.003, +0.348] |
+| Unrolled `ai2_gate` and leaky, `sigmoid` | 0.100 | −0.22 to −0.29 |
+
+- On FashionMNIST the FCNN control shows interference at W=12 (whole interval below −0.01, upper bound −0.010), unlike on MNIST; unrolled gate and leaky layers do not reduce it, except possibly leaky λ=0.99 (interval includes 0, +0.008 upper bound), which is not distinguishable from the control with 5 seeds.
 - At 5 epochs the plain `sigmoid` FCNN control does learn (accuracy 0.65), but the unrolled gate and the leaky layers with `sigmoid` stay at chance: inhibition with this scheme prevents training at width 12 here.
 - With `relu_sigmoid`, the unrolled gate and the leaky layers are not more robust than the FCNN control (backward transfer −0.03 against −0.02, intervals overlap), and larger λ gives higher final accuracy (0.88 to 0.92).
 - The FCNN control's interval at W=12 straddles the "present" and "absent" thresholds of the pilot (−0.05 and −0.02), so at 5 epochs interference is neither clearly present nor absent, consistent with the width being in the transition region.
