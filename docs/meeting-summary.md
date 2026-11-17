@@ -1,6 +1,6 @@
 # Meeting Summary: Incremental Autaptic-Inhibition Experiments
 
-Status: Phase 1 (coarse) and Phase 2 (exhaustive) are finished for MNIST, FashionMNIST and the mixed 20-class protocol.
+Status: Phase 1 (coarse) and Phase 2 (exhaustive) are finished for MNIST, FashionMNIST, and the mixed 20-class protocol.
 Setup: width 12, four equal hidden layers, class-incremental protocol with 1 initial class and 1 class per stage, 5 random seeds shared by all models of a launch.
 Coarse runs use 1 epoch per stage (mixed also 25 % of every stage's training examples); exhaustive runs use 5 epochs per stage and all training examples.
 Every figure title says "coarse" or "exhaustive"; paths are relative to the repository root.
@@ -9,7 +9,8 @@ Spreads are sample standard deviations (n−1) over 5 seeds; intervals are 95 % 
 ## Read This First
 
 - No robustness benefit of inhibition was found at width 12 with `relu_sigmoid`, on any dataset.
-  The unrolled gate equals the FCNN control on accuracy and backward transfer; leaky layers are equal or worse, and only λ=0.99 comes close.
+  The unrolled gate equals the FCNN control on accuracy and backward transfer.
+  Leaky layers have equal or lower accuracy, and their backward transfer differs from the control's only within the seed intervals (best point estimate: FashionMNIST λ=0.99, −0.028 against −0.055, intervals overlap).
 - The `sigmoid` scheme is uninformative.
   In the coarse runs (1 epoch) every `sigmoid` model, controls included, is at chance at every pilot width.
   In the exhaustive runs the plain `sigmoid` FCNN control learns (accuracy 0.65 MNIST, 0.71 FashionMNIST, 0.80 mixed), but the unrolled and leaky `sigmoid` models stay at chance on MNIST and FashionMNIST.
@@ -27,8 +28,8 @@ Spreads are sample standard deviations (n−1) over 5 seeds; intervals are 95 % 
 | 3 | 2.0 Heatmap, FashionMNIST | `results/plots/coarse/heatmap_fashion_mnist.png` | Same pattern with lower accuracy (final average 0.77 to 0.87 for `relu_sigmoid` models and CNN). | `2026-11-17-15-22_f7ca382` | coarse |
 | 4 | 2.0 Heatmap, mixed 20 classes | `results/plots/coarse/heatmap_mixed.png` (by label, MNIST and FashionMNIST marked), `heatmap_mixed_by_rank.png` (by introduction rank, diagonal marks) | Controls reach 0.79 (FCNN) and 0.84 (CNN) final accuracy; unrolled gate 0.73; leaky 0.69; `sigmoid` models are at chance (0.05). | `2026-11-17-15-29_f7ca382` | coarse |
 | 5 | 2.1 Newest-class curves | `results/plots/coarse/newest_class_mnist.png`, `newest_class_fashion_mnist.png`, `newest_class_mixed.png` | The unrolled gate matches the FCNN control on newest-class accuracy and backward transfer (MNIST final accuracy 0.916 versus 0.920); the leaky layer learns new classes more slowly (MNIST newest-class accuracy 0.83 versus 0.93). | the three launches above | coarse |
-| 6 | 2.3 Leaky layer versus unrolled gate | same files as 5 and 2 | Leaky inhibition (λ=0.9) lowers final accuracy (MNIST 0.858 versus 0.916) and keeps backward transfer at or above 0 (+0.018 MNIST, −0.015 FashionMNIST, versus −0.019 and −0.040 for the unrolled gate). | the three launches above | coarse |
-| 7 | 2.4 Inhibition per layer | `results/plots/coarse/inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, comparison `inhibition_eval_<dataset>.png` | The unrolled gate's inhibition mean falls slowly with stages (0.13 to 0.07 in layer 3 on MNIST); the leaky layer's rises with depth and stages (mixed: 0.06 to 0.31 in layer 3); the `sigmoid` layers sit at a constant value. | the three launches above | coarse |
+| 6 | 2.3 Leaky layer versus unrolled gate | same files as 5 and 2 | Leaky inhibition (λ=0.9) lowers final accuracy (MNIST 0.858 versus 0.916) and its backward transfer is at or above 0 in the coarse runs (+0.018 MNIST, −0.015 FashionMNIST, versus −0.019 and −0.040 for the unrolled gate); the exhaustive runs do not confirm this (leaky λ=0.9: −0.032 MNIST, −0.062 FashionMNIST, versus −0.027 and −0.055 for the unrolled gate). | the three launches above | coarse |
+| 7 | 2.4 Inhibition per layer | `results/plots/coarse/inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, comparison `inhibition_eval_<dataset>.png` | The unrolled gate's inhibition mean falls slowly with stages (0.13 to 0.07 in the last hidden layer on MNIST); the leaky layer's rises with depth and stages (mixed: 0.06 to 0.31 in the last hidden layer); the `sigmoid` layers sit at a constant value. | the three launches above | coarse |
 
 ## Phase 2: Exhaustive Runs (5 Epochs per Stage, Full Training Sets)
 
@@ -95,9 +96,9 @@ All in `results/plots/exhaustive/` (PNG and PDF), launches as above, all exhaust
 
 | Figure | Finding |
 | --- | --- |
-| `heatmap_<dataset>.png`, `heatmap_mixed_by_rank.png` | `relu_sigmoid` models keep old classes after introduction (mixed: yellow below the introduction diagonal, with slow fade for leaky λ=0.5); `sigmoid` models are mostly dark, and the leaky `sigmoid` layers on mixed learn only about half a dozen classes. |
-| `newest_class_<dataset>.png` | `relu_sigmoid` models learn each new class to 0.85 to 1.0 (MNIST), with leaky λ=0.5 dipping to 0.74 at stage 5; `sigmoid` unrolled and leaky models fall to 0 newest-class accuracy from stage 2 (MNIST). |
-| `inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, `inhibition_eval_<dataset>.png` | Test-set inhibition mean in layer 3, first to last stage: unrolled gate falls (MNIST 0.11 to 0.07, mixed 0.13 to 0.06); leaky λ=0.99 rises (MNIST 0.26 to 0.51, FashionMNIST 0.17 to 0.42, mixed 0.25 to 0.50); leaky `sigmoid` stays near 0.5; the unrolled `sigmoid` gate stays near 0.3 at chance but falls to 0.06 on mixed, where it learns. |
+| `heatmap_<dataset>.png`, `heatmap_mixed_by_rank.png` | `relu_sigmoid` models keep old classes after introduction (mixed: yellow below the introduction diagonal, with slow fade for leaky λ=0.5); `sigmoid` models are mostly dark, and the leaky `sigmoid` layers on mixed end with one class learned (final accuracy 0.05). |
+| `newest_class_<dataset>.png` | `relu_sigmoid` models learn each new class to a seed mean of 0.74 to 1.0 (MNIST), the lowest being leaky λ=0.5 at stage 5 (0.74) and stage 8 (0.75); `sigmoid` leaky models fall to 0 newest-class accuracy from stage 2 and the unrolled `sigmoid` gate stays below 0.5 (MNIST). |
+| `inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, `inhibition_eval_<dataset>.png` | Test-set inhibition mean in the last hidden layer (`hidden_layers.3`), first to last stage: unrolled gate falls (MNIST 0.11 to 0.07, mixed 0.13 to 0.06); leaky λ=0.99 rises (MNIST 0.26 to 0.51, FashionMNIST 0.17 to 0.42, mixed 0.25 to 0.50); leaky `sigmoid` stays near 0.5; the unrolled `sigmoid` gate stays near 0.3 at chance but falls to 0.06 on mixed, where it learns. |
 
 ## What Was Run
 
