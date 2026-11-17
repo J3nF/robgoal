@@ -3,6 +3,7 @@
 Status: Phase 1 (coarse) and Phase 2 (exhaustive) are finished for MNIST, FashionMNIST, and the mixed 20-class protocol.
 Setup: width 12, four equal hidden layers, class-incremental protocol with 1 initial class and 1 class per stage, 5 random seeds shared by all models of a launch.
 Coarse runs use 1 epoch per stage (mixed also 25 % of every stage's training examples); exhaustive runs use 5 epochs per stage and all training examples.
+The coarse and size-pilot figures in `results/plots/coarse/` and `results/plots/size_pilot/` were re-rendered after the meeting deadline, at the researcher's request (zero x margin, shared inhibition y ranges, small label fixes), from the same launches, so numbers are unchanged but the files differ from the versions made for the meeting; the meeting versions were not kept, which departs from the rule not to overwrite Phase 1 figures.
 Every figure title says "coarse" or "exhaustive"; paths are relative to the repository root.
 Spreads are sample standard deviations (n−1) over 5 seeds; intervals are 95 % t-intervals.
 
@@ -96,12 +97,14 @@ All in `results/plots/exhaustive/` (PNG and PDF), launches as above, all exhaust
 
 | Figure | Finding |
 | --- | --- |
-| `heatmap_<dataset>.png`, `heatmap_mixed_by_rank.png` | `relu_sigmoid` models keep old classes after introduction (mixed: yellow below the introduction diagonal, with slow fade for leaky λ=0.5); `sigmoid` models are mostly dark, and the leaky `sigmoid` layers on mixed end with one class learned (final accuracy 0.05). |
-| `newest_class_<dataset>.png` | `relu_sigmoid` models learn each new class to a seed mean of 0.74 to 1.0 (MNIST), the lowest being leaky λ=0.5 at stage 5 (0.74) and stage 8 (0.75); `sigmoid` leaky models fall to 0 newest-class accuracy from stage 2 and the unrolled `sigmoid` gate stays below 0.5 (MNIST). |
-| `inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, `inhibition_eval_<dataset>.png` | Test-set inhibition mean in the last hidden layer (`hidden_layers.3`), first to last stage: unrolled gate falls (MNIST 0.11 to 0.07, mixed 0.13 to 0.06); leaky λ=0.99 rises (MNIST 0.26 to 0.51, FashionMNIST 0.17 to 0.42, mixed 0.25 to 0.50); leaky `sigmoid` stays near 0.5; the unrolled `sigmoid` gate stays near 0.3 at chance but falls to 0.06 on mixed, where it learns. |
+| `heatmap_<dataset>.png`, `heatmap_mixed_by_rank.png` | `relu_sigmoid` models keep old classes after introduction (mixed: yellow below the introduction diagonal, with slow fade for leaky λ=0.5); the leaky `sigmoid` layers and the unrolled `sigmoid` gate on MNIST and FashionMNIST are mostly dark, while the `sigmoid` FCNN control and the unrolled `sigmoid` gate on mixed are partly green (final accuracy 0.80 and 0.61); the leaky `sigmoid` layers on mixed end with one class learned (final accuracy 0.05). |
+| `newest_class_<dataset>.png` | `relu_sigmoid` models learn each new class to a seed mean of 0.74 to 1.0 (MNIST), the lowest being leaky λ=0.5 at stage 5 (0.74) and stage 8 (0.75); `sigmoid` leaky models fall to 0 newest-class accuracy from stage 2 and the unrolled `sigmoid` gate falls below 0.5 from stage 2 (0.8 at stage 1, MNIST). |
+| `inhibition_mean_<dataset>_<model>.png`, `inhibition_var_<dataset>_<model>.png`, `inhibition_eval_<dataset>.png` | Test-set inhibition mean in the last hidden layer (`hidden_layers.3`), first to last stage: unrolled gate falls (MNIST 0.11 to 0.07, mixed 0.13 to 0.06); leaky λ=0.99 rises (MNIST 0.26 to 0.51, FashionMNIST 0.17 to 0.42, mixed 0.25 to 0.50); leaky `sigmoid` stays between 0.47 and 0.61; the unrolled `sigmoid` gate stays near 0.3 at chance but falls to 0.06 on mixed, where it learns. |
 
 ## What Was Run
 
+- Exhaustive: three launches (MNIST, FashionMNIST, mixed), 55 runs each (165 runs), 5 epochs per stage, all training examples.
+- An aborted first pilot launch, `2026-11-17-14-47_6996f49`, is not used (details in `docs/old-lab-book.md`).
 - Pilot: 7 widths × (2 FCNN controls + 1 CNN control) × 5 seeds, 1 epoch per stage, MNIST (105 runs).
 - Three coarse launches, 35 runs each: CNN control (matched channels), 2 FCNN controls, 2 unrolled `ai2_gate` (T=5, weight 1), 2 leaky (λ=0.9), for MNIST, FashionMNIST and the mixed protocol.
 - `ai2_diff` was not run (TRIAGE.md #1).

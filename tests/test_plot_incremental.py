@@ -246,3 +246,23 @@ def test_width_text_and_rank_marks_follow_the_stage_digits(runs) -> None:
 
 def test_row_limits_of_no_cells_are_empty() -> None:
     assert pi.get_row_limits([], "mean") == {}
+
+
+def test_plot_setup_removes_the_x_margin() -> None:
+    pu.plot_setup()
+    _, ax = plt.subplots()
+    ax.plot([0, 1, 2], [0, 1, 0])
+    assert ax.get_xlim() == (0.0, 2.0)
+
+
+def test_by_rank_heatmap_labels_the_x_axis_as_rank(runs) -> None:
+    pu.plot_setup()
+    cells = pi.build_cells(runs, "mnist")
+    fig = pi.plot_heatmaps(cells, "mnist", "coarse", by_rank=True)
+    assert any(ax.get_xlabel() == "introduction rank" for ax in fig.axes)
+
+
+def test_newest_class_backward_transfer_axis_stays_above_minus_one(runs) -> None:
+    pu.plot_setup()
+    fig = pi.plot_newest_class_curves(pi.build_cells(runs, "mnist"), "mnist", "coarse")
+    assert fig.axes[1].get_ylim()[0] >= -1.0
