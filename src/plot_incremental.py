@@ -325,7 +325,10 @@ def _eval_series(cell: Cell, layer: str, statistic: str) -> np.ndarray:
 
 
 def get_row_limits(cells: list[Cell], statistic: str) -> dict[str, float]:
-    """Largest value (mean + std) per layer over all models, train and eval, for shared axes."""
+    """Largest value (mean + std) over all layers and models, train and eval, per layer key.
+
+    Every layer gets the same value, so all subplots of a statistic share one y range.
+    """
     limits: dict[str, float] = {}
     for cell in cells:
         for layer in get_layers(cell):
@@ -335,7 +338,8 @@ def get_row_limits(cells: list[Cell], statistic: str) -> dict[str, float]:
             series = _eval_series(cell, layer, statistic)
             top = max(top, float((series.mean(0) + series.std(0)).max()))
             limits[layer] = top
-    return limits
+    overall = max(limits.values())
+    return dict.fromkeys(limits, overall)
 
 
 def plot_inhibition_grid(
@@ -343,13 +347,13 @@ def plot_inhibition_grid(
 ) -> Figure:
     """One row per layer: training traces (one per stage) left, stage-end test values right.
 
-    Both columns of a row share the y axis, which spans 0 to the largest value over all
-    models (`limits`), so models are comparable.
+    All subplots share one y range, 0 to the largest value over all layers and models
+    (`limits`), so layers and models are comparable.
     """
     num_seeds = len(cell.runs)
     layers = get_layers(cell)
     fig, axes = plt.subplots(
-        len(layers), 2, figsize=(6.4, 1.5 * len(layers) + 0.9), squeeze=False, sharey="row"
+        len(layers), 2, figsize=(6.4, 1.5 * len(layers) + 0.9), squeeze=False, sharey=True
     )
     num_stages = len(_eval_series(cell, layers[0], statistic)[0])
     colors = pu.get_colorcycle(num_stages)
@@ -420,6 +424,7 @@ def plot_inhibition_eval_comparison(cells: list[Cell], dataset: str, tag: str) -
                 )
             axes[row, col].set_ylim(0, limits[layer] * 1.05)
             axes[row, col].tick_params(labelsize="xx-small")
+            axes[row, col].xaxis.set_major_locator(MaxNLocator(integer=True))
         axes[0, col].set_title(f"test-set {statistic}", fontsize="small")
         axes[-1, col].set_xlabel("stage", fontsize="x-small")
     for row, layer in enumerate(layers):

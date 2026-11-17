@@ -101,15 +101,16 @@ def test_all_figures_render(runs, tmp_path: Path) -> None:
     assert all(fig.axes for fig in figures)
 
 
-def test_inhibition_grid_shares_the_y_range_within_each_row(runs) -> None:
+def test_inhibition_grid_shares_one_y_range_across_all_subplots(runs) -> None:
     pu.plot_setup()
     inhibiting = [c for c in pi.build_cells(runs, "mnist") if pi.get_layers(c)]
     limits = pi.get_row_limits(inhibiting, "mean")
     fig = pi.plot_inhibition_grid(inhibiting[0], "mnist", "coarse", "mean", limits)
     grid = fig.axes[: 2 * len(pi.get_layers(inhibiting[0]))]  # the colourbar axes come last
-    for left, right in zip(grid[0::2], grid[1::2]):
-        assert left.get_ylim() == right.get_ylim()
-        assert left.get_ylim()[0] == 0
+    assert len(grid) > 2
+    assert len({ax.get_ylim() for ax in grid}) == 1
+    assert grid[0].get_ylim()[0] == 0
+    assert len(set(limits.values())) == 1
 
 
 def test_main_writes_png_and_pdf(runs, launch: Launch, tmp_path: Path) -> None:
