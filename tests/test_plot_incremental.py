@@ -201,3 +201,15 @@ def test_width_table_needs_two_seeds(launch: Launch) -> None:
     _write(launch, make_config("width4_fcnn_control_relu", T=1, hidden_sizes=(4,)), 1)
     with pytest.raises(ValueError, match="need >= 2"):
         pilot_width.build_width_table(pu.load_runs(launch.directory))
+
+
+def test_choose_width_falls_back_to_the_trainable_scheme() -> None:
+    rows = [
+        _row("fcnn sigmoid", 4, -0.3, -0.1, accuracy=0.1),
+        _row("fcnn sigmoid", 16, -0.3, -0.1, accuracy=0.1),
+        _row("fcnn relu_sigmoid", 4, -0.3, -0.1),
+        _row("fcnn relu_sigmoid", 16, -0.01, 0.01),
+    ]
+    choice = pilot_width.choose_width(rows)
+    assert (choice.w_low, choice.w_high, choice.width) == (4, 16, 8)
+    assert "fcnn sigmoid" in choice.note

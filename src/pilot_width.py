@@ -10,6 +10,10 @@ Reads the run files of a `--scan width` launch. Definition, fixed before the fir
   average accuracy >= `MIN_FINAL_ACCURACY` (0.8), so a network that never learned does not count.
 - The decision uses the FCNN controls: a width counts only if both activation schemes satisfy it.
   The CNN control is reported, not decisive.
+- Fallback (added after the pilot showed the sigmoid scheme stays at chance for every width, so
+  its interval says nothing about capacity): if both ends cannot be found with both schemes, the
+  rule is applied to the schemes whose seed-mean accuracy reaches `MIN_FINAL_ACCURACY` at some
+  width, and the note says so.
 - `W_low` = largest width with interference present; `W_high` = smallest larger width with it
   absent; `W` = their geometric mean rounded to a multiple of 4 (of 2 below 8).
 """
@@ -138,6 +142,26 @@ def choose_width(rows: list[WidthRow]) -> WidthChoice:
     fcnn = [row for row in rows if row.family.startswith("fcnn")]
     if not fcnn:
         raise ValueError("no FCNN rows to choose a width from")
+    choice = _apply_rule(fcnn)
+    if choice.w_low is not None and choice.w_high is not None:
+        return choice
+    trainable = {row.family for row in fcnn if row.accuracy_mean >= MIN_FINAL_ACCURACY}
+    if trainable and trainable != {row.family for row in fcnn}:
+        retry = _apply_rule([row for row in fcnn if row.family in trainable])
+        if retry.w_low is not None and retry.w_high is not None:
+            excluded = sorted({row.family for row in fcnn} - trainable)
+            return WidthChoice(
+                retry.width,
+                retry.w_low,
+                retry.w_high,
+                f"both-scheme rule failed; {excluded} never reaches accuracy "
+                f"{MIN_FINAL_ACCURACY}, so only {sorted(trainable)} decided",
+            )
+    return choice
+
+
+def _apply_rule(fcnn: list[WidthRow]) -> WidthChoice:
+    """The both-ends rule on `fcnn` rows, requiring every family present at a width to agree."""
     widths = sorted({row.width for row in fcnn})
     schemes = len({row.family for row in fcnn})
 

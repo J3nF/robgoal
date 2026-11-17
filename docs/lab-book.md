@@ -105,3 +105,74 @@ Check whether ai2 inhibition and output switch each other on and off across unro
 ### Code changes
 
 Same code as the MNIST launch of the same scan (commit unchanged).
+
+## 2026-11-17-14-47_6996f49
+
+- **Started:** 2026-11-17T14:47:16+00:00
+- **Branch:** in_the_weeds
+- **Commit:** 6996f49b381e76b4c348522ebf7beeb216e8c2d9
+- **Scan:** width
+- **Planned runs:** 105
+- **Dataset:** mnist
+- **Seeds:** 5 random seeds per config
+- **Initial classes / classes per stage:** 1 / 1
+- **Workers:** 12
+- **MLflow:** on
+- **Results:** `results/2026-11-17-14-47_6996f49/`
+
+Command:
+
+```sh
+python src/run_experiments.py --scan width --widths 2 4 8 16 32 64 128 --dataset mnist --initial-classes 1 --classes-per-stage 1 --num-seeds 5 --epochs-per-stage 1 --split-seeds --workers 12 --goal 'Step 1 size pilot (coarse: 1 epoch per stage): find the FCNN width W where catastrophic interference is neither present everywhere nor absent everywhere, using FCNN controls (T=1, both schemes) and matched CNN controls.' --method '7 widths (2, 4, 8, 16, 32, 64, 128), four equal hidden layers, 2 FCNN controls + 1 CNN control with matched channels per width, MNIST, 1 initial class and 1 class per stage, 1 epoch per stage (coarse), 5 random seeds, every seed its own job.' --code-changes 'New: LeakyLayer, mixed dataset helpers, per-layer inhibition recording, --scan width/incremental, --split-seeds, --epochs-per-stage, --train-fraction, num_classes in models.'
+```
+
+### Goal
+
+Step 1 size pilot (coarse: 1 epoch per stage): find the FCNN width W where catastrophic interference is neither present everywhere nor absent everywhere, using FCNN controls (T=1, both schemes) and matched CNN controls.
+
+### Method
+
+7 widths (2, 4, 8, 16, 32, 64, 128), four equal hidden layers, 2 FCNN controls + 1 CNN control with matched channels per width, MNIST, 1 initial class and 1 class per stage, 1 epoch per stage (coarse), 5 random seeds, every seed its own job.
+
+### Code changes
+
+New: LeakyLayer, mixed dataset helpers, per-layer inhibition recording, --scan width/incremental, --split-seeds, --epochs-per-stage, --train-fraction, num_classes in models.
+
+### Outcome note (appended by hand)
+
+Aborted run, no valid result beyond the first 12 runs.
+The agent edited tracked files in the working tree while the launch was running, so every later job refused to start (the launcher's per-job clean-tree check).
+12 of 105 runs finished (width 2 FCNN controls and CNN controls); 93 jobs failed with `DirtyTreeError`.
+The pilot is relaunched from a clean detached worktree of the same repository (`/home/vscode/runner`, symlinked to the same `results/`), so development no longer touches the launched tree.
+
+## 2026-11-17-14-54_02ca940
+
+- **Started:** 2026-11-17T14:54:09+00:00
+- **Branch:** detached
+- **Commit:** 02ca94006525d58b72ed78f1261f2fea2ca22eb6
+- **Scan:** width
+- **Planned runs:** 105
+- **Dataset:** mnist
+- **Seeds:** 5 random seeds per config
+- **Initial classes / classes per stage:** 1 / 1
+- **Workers:** 12
+- **MLflow:** on
+- **Results:** `results/2026-11-17-14-54_02ca940/`
+
+Command:
+
+```sh
+python src/run_experiments.py --scan width --widths 2 4 8 16 32 64 128 --dataset mnist --initial-classes 1 --classes-per-stage 1 --num-seeds 5 --epochs-per-stage 1 --split-seeds --workers 12 --goal 'Step 1 size pilot (coarse: 1 epoch per stage), relaunch of an aborted launch: find the FCNN width W where catastrophic interference is neither present everywhere nor absent everywhere, using FCNN controls (T=1, both schemes) and matched CNN controls.' --method '7 widths (2, 4, 8, 16, 32, 64, 128), four equal hidden layers, 2 FCNN controls + 1 CNN control with matched channels per width, MNIST, 1 initial class and 1 class per stage, 1 epoch per stage (coarse), 5 random seeds, every seed its own job. Launched from a detached worktree (/home/vscode/runner) so development edits cannot dirty the launched tree.' --code-changes 'Same code as the aborted launch 2026-11-17-14-47_6996f49 (plus analysis and plotting modules that the pilot does not run): LeakyLayer, mixed dataset helpers, per-layer inhibition recording, --scan width/incremental, --split-seeds, --epochs-per-stage, --train-fraction, num_classes in models.'
+```
+
+### Goal
+
+Step 1 size pilot (coarse: 1 epoch per stage), relaunch of an aborted launch: find the FCNN width W where catastrophic interference is neither present everywhere nor absent everywhere, using FCNN controls (T=1, both schemes) and matched CNN controls.
+
+### Method
+
+7 widths (2, 4, 8, 16, 32, 64, 128), four equal hidden layers, 2 FCNN controls + 1 CNN control with matched channels per width, MNIST, 1 initial class and 1 class per stage, 1 epoch per stage (coarse), 5 random seeds, every seed its own job. Launched from a detached worktree (/home/vscode/runner) so development edits cannot dirty the launched tree.
+
+### Code changes
+
+Same code as the aborted launch 2026-11-17-14-47_6996f49 (plus analysis and plotting modules that the pilot does not run): LeakyLayer, mixed dataset helpers, per-layer inhibition recording, --scan width/incremental, --split-seeds, --epochs-per-stage, --train-fraction, num_classes in models.
