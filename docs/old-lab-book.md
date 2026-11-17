@@ -283,12 +283,13 @@ Result (`results/plots/size_pilot/width_table.csv`, `width_pilot.png`):
 
 - `relu_sigmoid`: $D = -0.173$ at $W=2$ (present, accuracy 0.22), $-0.060$ at 4 and $-0.052$ at 8 (neither: the intervals reach above $-0.05$), $-0.014$ at 16, and $-0.000$ at 64 (absent, accuracy 0.96).
 - `sigmoid`: accuracy is 0.10 to 0.12 (chance) at every width, including 128, so $D$ is a floor effect and says nothing about capacity.
-- CNN: $D$ within about $\pm 0.04$ of 0 at every width, accuracy 0.93 to 0.98; the CNN never shows interference in this protocol.
+- CNN: mean $D$ between $-0.02$ and $+0.04$ at every width, no interval below $-0.05$, accuracy 0.93 to 0.98; the CNN never shows interference in this protocol.
 
 The pre-registered both-scheme rule therefore cannot be satisfied.
 Notice that the fallback is a choice, not the correct approach: the rule is applied to the schemes that reach accuracy 0.8 at some width, which is `relu_sigmoid` only.
 That gives $W_\text{low} = 2$, $W_\text{high} = 64$, geometric mean 11.3, rounded to a multiple of 4 gives $W = 12$.
-Uncertainty: the interval at $W = 4$ and $W = 8$ is wide (5 seeds), so $W_\text{low}$ is really "somewhere between 2 and 8" and $W$ could as well be 8 to 16 (p=70% that 12 sits in the transition region for `relu_sigmoid`).
+Uncertainty: the interval at $W = 4$ and $W = 8$ is wide (5 seeds), so $W_\text{low}$ is really "somewhere between 2 and 8" and $W$ could as well be 8 to 16 (no probability can be worked out from 5 seeds per width).
+Notice also that $W_\text{low} = 2$ is a network with seed-mean accuracy 0.22: it counts as interference because it loses what it learned at introduction, but it is close to a floor.
 The pilot ran 1 epoch per stage; the exhaustive runs use 5, which probably moves the transition to smaller widths (?).
 The exhaustive launches report $D$ with its interval for the controls at $W = 12$, so that can be checked.
 
@@ -311,7 +312,7 @@ The state after a batch is carried to the next batch, detached; it is kept separ
 Inside a batch, gradients flow between samples (earlier samples' signals feed later ones).
 
 Primary $\lambda = 0.9$ (memory about 10 samples, so the signal is a smoothed population-activity estimate).
-With shuffled training batches neighbouring samples are random classes, so the layer cannot track the newest class specifically; the stage reset only matters for the first ~10 samples of a stage (p=85%).
+With shuffled training batches neighbouring samples are random classes, so the layer cannot track the newest class specifically; the stage reset only matters for the first ~10 samples of a stage.
 The mixed test set uses one fixed random order, so a test stream mixes MNIST and FashionMNIST like the training batches; evaluation still depends on test order and the fixed batch size 256.
 The exhaustive launches add $\lambda = 0.5$ and $0.99$ (at most two more, as agreed).
 
@@ -322,3 +323,8 @@ Notice the shortcut: a network can in principle tell the datasets apart from int
 Random class order per seed, recorded as `stage_digits` in each run's meta; all configs of a launch share the seeds, so every model sees the same orders.
 Coarse runs use 25 % of every stage's training examples, drawn once per seed.
 Because the order differs per seed, the seed-averaged heatmap by label blurs the introduction diagonal; a second heatmap orders each seed's classes by introduction rank.
+
+### Figure Axes
+
+Backward-transfer axes are signed, so they span the data range (negative values included) instead of starting at 0; the plotting rule "axes start at 0" is deviated from there on purpose, and the figure titles say so.
+Heatmaps use one fixed 0-1 colour range.

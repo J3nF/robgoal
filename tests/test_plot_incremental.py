@@ -213,3 +213,31 @@ def test_choose_width_falls_back_to_the_trainable_scheme() -> None:
     choice = pilot_width.choose_width(rows)
     assert (choice.w_low, choice.w_high, choice.width) == (4, 16, 8)
     assert "fcnn sigmoid" in choice.note
+
+
+def test_t_interval_matches_a_hand_computation() -> None:
+    mean, low, high = pilot_width.get_t_interval(np.array([1.0, 2.0, 3.0]))
+    half = 4.302653 / np.sqrt(3)  # t(0.975, df=2) * s / sqrt(n), s = 1
+    assert mean == 2.0
+    assert high - mean == pytest.approx(half, rel=1e-5)
+    assert mean - low == pytest.approx(half, rel=1e-5)
+
+
+def test_t_interval_needs_two_values() -> None:
+    with pytest.raises(ValueError, match=">= 2"):
+        pilot_width.get_t_interval(np.array([1.0]))
+
+
+def test_chosen_width_stays_strictly_between_adjacent_ends() -> None:
+    rows = [_row("fcnn sigmoid", 2, -0.4, -0.2), _row("fcnn sigmoid", 4, -0.01, 0.01)]
+    choice = pilot_width.choose_width(rows)
+    assert (choice.w_low, choice.w_high, choice.width) == (2, 4, 3)
+
+
+def test_width_text_and_rank_marks_follow_the_stage_digits(runs) -> None:
+    cells = pi.build_cells(runs, "mnist")
+    assert pi.get_width_text(cells) == "width 4"
+    fig = pi.plot_heatmaps(cells, "mnist", "coarse", by_rank=True)
+    marks = np.asarray(fig.axes[0].collections[0].get_offsets())[:, 1]
+    assert marks[:3].tolist() == [0, 1, 2]  # rank r enters in stage r with one epoch per stage
+    assert "width 4" in fig.get_suptitle()

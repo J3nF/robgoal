@@ -101,6 +101,10 @@ def build_cells(runs: list[RunFile], dataset: str) -> list[Cell]:
     for run in chosen:
         by_label.setdefault(get_model_label(run), []).append(run)
 
+    for label, group in by_label.items():
+        if len({run.meta["config_name"] for run in group}) > 1:
+            raise ValueError(f"label {label!r} covers several configs; labels must be unique")
+
     def sort_key(label: str) -> tuple[int, str]:
         rank = 0 if "control" in label else 1 if "unrolled" in label else 2
         return rank, label
@@ -122,6 +126,15 @@ def get_styles(cells: list[Cell]) -> dict[str, dict]:
         }
         for i, cell in enumerate(cells)
     }
+
+
+def get_width_text(cells: list[Cell]) -> str:
+    """ "width W" of the FCNN hidden layers in `cells` (the CNN's channels are matched to it)."""
+    for cell in cells:
+        sizes = pu.run_field(cell.runs[0], "hidden_sizes")
+        if sizes:
+            return f"width {sizes[0]}"
+    return "width n/a"
 
 
 def _class_name(label: int) -> str:
@@ -176,7 +189,8 @@ def plot_heatmaps(cells: list[Cell], dataset: str, tag: str, by_rank: bool = Fal
     fig.colorbar(sm, ax=axes[:rows].ravel().tolist(), label="test accuracy (0-1)", shrink=0.8)
     order = "by introduction rank" if by_rank else "by class label"
     fig.suptitle(
-        f"{tag}: per-class test accuracy over epochs, {dataset}, {order}, seed mean ({num_seeds} seeds)",
+        f"{tag}: per-class test accuracy over epochs, {dataset}, {get_width_text(cells)}, {order}, "
+        f"seed mean ({num_seeds} seeds)",
         fontsize="small",
     )
     return fig
@@ -189,7 +203,8 @@ def _plot_cell_heatmap(cell: Cell, ax: Axes, mixed: bool, by_rank: bool) -> None
         orders = [[d for digits in sd for d in digits] for sd in cell.stage_digits()]
         accuracy = np.stack([acc[:, order] for acc, order in zip(accuracy, orders)])
         num_classes = accuracy.shape[2]
-        introduced = list(range(num_classes))
+        stage_digits = cell.stage_digits()[0]
+        introduced = [s for s, digits in enumerate(stage_digits) for _ in digits]
         labels: list[str] | None = [str(i) for i in range(num_classes)]
         spans = None
     else:
@@ -274,7 +289,8 @@ def plot_newest_class_curves(cells: list[Cell], dataset: str, tag: str) -> Figur
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
     fig.suptitle(
-        f"{tag}: newest class per stage, {dataset}, mean +/- std over {num_seeds} seeds; "
+        f"{tag}: newest class per stage, {dataset}, {get_width_text(cells)}, "
+        f"mean +/- std over {num_seeds} seeds; "
         "BWT axis linear, spans the data",
         fontsize="small",
     )
@@ -369,7 +385,8 @@ def plot_inhibition_grid(
         shrink=0.8,
     )
     fig.suptitle(
-        f"{tag}: inhibition {statistic} per layer, {cell.label}, {dataset}, mean +/- std over {num_seeds} seeds; "
+        f"{tag}: inhibition {statistic} per layer, {cell.label}, {dataset}, "
+        f"{get_width_text([cell])}, mean +/- std over {num_seeds} seeds; "
         "controls have no inhibition and are not shown",
         fontsize="x-small",
     )
@@ -409,7 +426,8 @@ def plot_inhibition_eval_comparison(cells: list[Cell], dataset: str, tag: str) -
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside right center", frameon=False, fontsize="x-small")
     fig.suptitle(
-        f"{tag}: inhibition after each stage, {dataset}, mean +/- std over {num_seeds} seeds",
+        f"{tag}: inhibition after each stage, {dataset}, {get_width_text(inhibiting)}, "
+        f"mean +/- std over {num_seeds} seeds",
         fontsize="small",
     )
     return fig

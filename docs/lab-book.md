@@ -176,3 +176,67 @@ Step 1 size pilot (coarse: 1 epoch per stage), relaunch of an aborted launch: fi
 ### Code changes
 
 Same code as the aborted launch 2026-11-17-14-47_6996f49 (plus analysis and plotting modules that the pilot does not run): LeakyLayer, mixed dataset helpers, per-layer inhibition recording, --scan width/incremental, --split-seeds, --epochs-per-stage, --train-fraction, num_classes in models.
+
+## 2026-11-17-15-15_f7ca382
+
+- **Started:** 2026-11-17T15:15:43+00:00
+- **Branch:** detached
+- **Commit:** f7ca382fb86dfb107a4112b022f7485fbfc9473d
+- **Scan:** incremental
+- **Planned runs:** 35
+- **Dataset:** mnist
+- **Seeds:** 5 random seeds per config
+- **Initial classes / classes per stage:** 1 / 1
+- **Workers:** 12
+- **MLflow:** on
+- **Results:** `results/2026-11-17-15-15_f7ca382/`
+
+Command:
+
+```sh
+python src/run_experiments.py --scan incremental --width 12 --leaky-decays 0.9 --dataset mnist --initial-classes 1 --classes-per-stage 1 --num-seeds 5 --epochs-per-stage 1 --split-seeds --workers 12 --goal 'Coarse run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.9) against FCNN and CNN controls, mnist, width 12.' --method 'Coarse: 1 epoch per stage (exhaustive uses 5), mnist, 1 initial class and 1 class per stage, width 12 from the size pilot (four equal hidden layers), 7 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 2 leaky), 5 random seeds shared by all configs, every seed its own job.' --code-changes 'Launched from a detached worktree at the commit recorded here. New: LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan, shared seeds per launch, fixed shuffled mixed test order.'
+```
+
+### Goal
+
+Coarse run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.9) against FCNN and CNN controls, mnist, width 12.
+
+### Method
+
+Coarse: 1 epoch per stage (exhaustive uses 5), mnist, 1 initial class and 1 class per stage, width 12 from the size pilot (four equal hidden layers), 7 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 2 leaky), 5 random seeds shared by all configs, every seed its own job.
+
+### Code changes
+
+Launched from a detached worktree at the commit recorded here. New: LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan, shared seeds per launch, fixed shuffled mixed test order.
+
+## 2026-11-17-15-22_f7ca382
+
+- **Started:** 2026-11-17T15:22:42+00:00
+- **Branch:** detached
+- **Commit:** f7ca382fb86dfb107a4112b022f7485fbfc9473d
+- **Scan:** incremental
+- **Planned runs:** 35
+- **Dataset:** fashion_mnist
+- **Seeds:** 5 random seeds per config
+- **Initial classes / classes per stage:** 1 / 1
+- **Workers:** 12
+- **MLflow:** on
+- **Results:** `results/2026-11-17-15-22_f7ca382/`
+
+Command:
+
+```sh
+python src/run_experiments.py --scan incremental --width 12 --leaky-decays 0.9 --dataset fashion_mnist --initial-classes 1 --classes-per-stage 1 --num-seeds 5 --epochs-per-stage 1 --split-seeds --workers 12 --goal 'Coarse run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.9) against FCNN and CNN controls, fashion_mnist, width 12.' --method 'Coarse: 1 epoch per stage (exhaustive uses 5), fashion_mnist, 1 initial class and 1 class per stage, width 12 from the size pilot (four equal hidden layers), 7 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 2 leaky), 5 random seeds shared by all configs, every seed its own job.' --code-changes 'Launched from a detached worktree at the commit recorded here. New: LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan, shared seeds per launch, fixed shuffled mixed test order.'
+```
+
+### Goal
+
+Coarse run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.9) against FCNN and CNN controls, fashion_mnist, width 12.
+
+### Method
+
+Coarse: 1 epoch per stage (exhaustive uses 5), fashion_mnist, 1 initial class and 1 class per stage, width 12 from the size pilot (four equal hidden layers), 7 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 2 leaky), 5 random seeds shared by all configs, every seed its own job.
+
+### Code changes
+
+Launched from a detached worktree at the commit recorded here. New: LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan, shared seeds per launch, fixed shuffled mixed test order.

@@ -42,6 +42,7 @@ __all__ = [
     "WidthRow",
     "build_width_table",
     "choose_width",
+    "get_t_interval",
     "round_width",
 ]
 
@@ -119,18 +120,23 @@ def build_width_table(runs: list[RunFile]) -> list[WidthRow]:
     for (family, width), values in sorted(per_cell.items()):
         if len(values) < 2:
             raise ValueError(f"{family} width {width} has {len(values)} seed(s); need >= 2")
-        d_values = np.array([d for d, _ in values])
-        mean = float(d_values.mean())
-        half = (
-            t_quantile(0.975, len(values) - 1)
-            * float(d_values.std(ddof=1))
-            / math.sqrt(len(values))
-        )
+        mean, low, high = get_t_interval(np.array([d for d, _ in values]))
         accuracy_mean = float(np.mean([a for _, a in values]))
-        rows.append(
-            WidthRow(family, width, len(values), mean, mean - half, mean + half, accuracy_mean)
-        )
+        rows.append(WidthRow(family, width, len(values), mean, low, high, accuracy_mean))
     return rows
+
+
+def get_t_interval(values: np.ndarray) -> tuple[float, float, float]:
+    """Mean and 95 % t-interval (`n - 1` degrees of freedom, ddof=1 spread) of `values`.
+
+    Raises:
+        ValueError: if fewer than 2 values are given.
+    """
+    if len(values) < 2:
+        raise ValueError(f"need >= 2 values for an interval, got {len(values)}")
+    mean = float(values.mean())
+    half = t_quantile(0.975, len(values) - 1) * float(values.std(ddof=1)) / math.sqrt(len(values))
+    return mean, mean - half, mean + half
 
 
 def choose_width(rows: list[WidthRow]) -> WidthChoice:
@@ -174,7 +180,10 @@ def _apply_rule(fcnn: list[WidthRow]) -> WidthChoice:
     absent = [w for w in widths if holds(w, "absent") and (w_low is None or w > w_low)]
     w_high = min(absent) if absent else None
     if w_low is not None and w_high is not None:
-        return WidthChoice(round_width(math.sqrt(w_low * w_high)), w_low, w_high, "")
+        middle = round_width(math.sqrt(w_low * w_high))
+        if w_high - w_low > 1:
+            middle = max(w_low + 1, min(w_high - 1, middle))  # strictly between the ends
+        return WidthChoice(middle, w_low, w_high, "")
     if w_low is None and w_high is None:
         closest = min(fcnn, key=lambda row: abs(row.d_mean - (PRESENT_BELOW + ABSENT_ABOVE) / 2))
         return WidthChoice(
