@@ -24,6 +24,7 @@ __all__ = [
     "mean_std",
     "plot_accuracy_heatmap",
     "plot_activity_heatmap",
+    "plot_class_time_heatmap",
     "plot_epoch_curves",
     "plot_line_band",
     "plot_setup",
@@ -219,6 +220,100 @@ def plot_accuracy_heatmap(
     ax.set_ylabel("epoch")
     ax.set_xticks(range(accuracy.shape[1]))
     ax.set_yticks(range(accuracy.shape[0]))
+    return ax
+
+
+def plot_class_time_heatmap(
+    accuracy: np.ndarray,
+    ax: Axes | None = None,
+    *,
+    figsize: tuple[float, float] | None = None,
+    cmap: str = "viridis",
+    epochs_per_stage: int | None = None,
+    introduced_in: Sequence[float] | None = None,
+    class_labels: Sequence[str] | None = None,
+    group_spans: Sequence[tuple[int, int, str]] | None = None,
+    colorbar: bool = True,
+) -> Axes:
+    """Heatmap with classes on x, time on y and per-class test accuracy as colour.
+
+    Like `plot_accuracy_heatmap` but with a fixed 0-1 colour range, a labelled colourbar, stage
+    boundaries and the stage in which each class enters marked.
+
+    Args:
+        accuracy: Shape (epochs, classes), or (seeds, epochs, classes) which is averaged over
+            seeds ignoring NaN. Time is the finest stored resolution, normally per epoch.
+        epochs_per_stage: If given, dotted horizontal lines separate the stages.
+        introduced_in: Stage index in which each class is introduced (length = classes, NaN for
+            a class never introduced); marks the end of that stage in the class's column with a
+            diamond. Needs `epochs_per_stage`.
+        class_labels: Tick labels per class; defaults to the class index.
+        group_spans: `(first_column, last_column, label)` brackets drawn under the x axis, e.g.
+            the MNIST and FashionMNIST classes of the mixed protocol.
+        colorbar: Add the colourbar; turn off when several panels share one.
+
+    Raises:
+        ValueError: if `accuracy` has the wrong dimensions, or `introduced_in` is given
+            without `epochs_per_stage` or with the wrong length.
+    """
+    accuracy = np.asarray(accuracy, dtype=float)
+    if accuracy.ndim == 3:
+        accuracy = np.nanmean(accuracy, axis=0)
+    if accuracy.ndim != 2:
+        raise ValueError(
+            f"accuracy must be (epochs, classes) or (seeds, ...), got {accuracy.shape}"
+        )
+    num_epochs, num_classes = accuracy.shape
+    if introduced_in is not None:
+        if epochs_per_stage is None:
+            raise ValueError("introduced_in needs epochs_per_stage")
+        if len(introduced_in) != num_classes:
+            raise ValueError(
+                f"introduced_in has {len(introduced_in)} entries for {num_classes} classes"
+            )
+    ax = _get_axes(ax, figsize)
+    image = ax.imshow(
+        accuracy, aspect="auto", cmap=cmap, vmin=0.0, vmax=1.0, interpolation="nearest"
+    )
+    if colorbar:
+        ax.figure.colorbar(image, ax=ax, label="test accuracy (0-1)")
+    ax.set_xlabel("class")
+    ax.set_ylabel("epoch (time)")
+    ax.set_xticks(range(num_classes))
+    ax.set_xticklabels(class_labels if class_labels is not None else range(num_classes))
+    if epochs_per_stage is not None:
+        for boundary in range(epochs_per_stage, num_epochs, epochs_per_stage):
+            ax.axhline(boundary - 0.5, color="white", linestyle=":", linewidth=0.5)
+    if introduced_in is not None and epochs_per_stage is not None:
+        rows = [(stage + 1) * epochs_per_stage - 1 for stage in introduced_in]
+        ax.scatter(
+            range(num_classes),
+            rows,
+            marker="D",
+            s=8,
+            c="white",
+            edgecolors="black",
+            linewidths=0.5,
+            zorder=3,
+        )
+    for first, last, label in group_spans or ():
+        ax.annotate(
+            label,
+            ((first + last) / 2, 1.0),
+            xycoords=("data", "axes fraction"),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize="x-small",
+        )
+        ax.plot(
+            [first - 0.4, last + 0.4],
+            [1.0, 1.0],
+            transform=ax.get_xaxis_transform(),
+            color="black",
+            linewidth=1.5,
+            clip_on=False,
+        )
     return ax
 
 

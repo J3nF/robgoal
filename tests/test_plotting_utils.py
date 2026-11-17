@@ -248,3 +248,41 @@ def test_save_figure_respects_savefig_rcparams(tmp_path: Path) -> None:
         large = pu.save_figure(ax, tmp_path / "large.png")
 
     assert plt.imread(large).shape[0] == 2 * plt.imread(small).shape[0]
+
+
+def test_class_time_heatmap_averages_seeds_fixes_range_and_marks_introductions() -> None:
+    accuracy = np.stack([np.full((6, 4), 0.2), np.full((6, 4), 0.6)])
+    ax = pu.plot_class_time_heatmap(
+        accuracy,
+        epochs_per_stage=2,
+        introduced_in=[0, 1, 2, 2],
+        group_spans=[(0, 1, "A"), (2, 3, "B")],
+    )
+    image = ax.images[0]
+    assert image.get_clim() == (0.0, 1.0)
+    assert np.allclose(image.get_array(), 0.4)
+    assert ax.get_xlabel() == "class" and "epoch" in ax.get_ylabel()
+    offsets = ax.collections[0].get_offsets()
+    assert [int(y) for _, y in offsets] == [1, 3, 5, 5]
+    plt.close("all")
+
+
+def test_class_time_heatmap_ignores_nan_seeds_and_accepts_one_run() -> None:
+    accuracy = np.stack([np.full((2, 3), np.nan), np.full((2, 3), 0.5)])
+    ax = pu.plot_class_time_heatmap(accuracy, colorbar=False)
+    assert np.allclose(ax.images[0].get_array(), 0.5)
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"introduced_in": [0, 1, 2]}, {"introduced_in": [0], "epochs_per_stage": 1}],
+)
+def test_class_time_heatmap_rejects_bad_introduction_arguments(kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        pu.plot_class_time_heatmap(np.zeros((2, 3)), **kwargs)
+
+
+def test_class_time_heatmap_rejects_wrong_dimensions() -> None:
+    with pytest.raises(ValueError, match="accuracy must be"):
+        pu.plot_class_time_heatmap(np.zeros(3))
