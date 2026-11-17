@@ -51,3 +51,9 @@ Figures go to `results/plots/exhaustive/`; the coarse figures are not overwritte
 
 - The controls' final backward transfer at W=12 with 5 epochs is reported with its 95 % interval, to test whether the pilot's width choice (made at 1 epoch) still sits in the transition region.
 - The sigmoid scheme is re-examined: if it trains at 5 epochs the figures become informative, if not it stays a documented floor.
+
+## Known Gap: Telling Launches Apart in MLflow
+
+The launch goal text ("coarse" or "exhaustive") goes into the lab book but not into MLflow, which tags runs with `launch_id`, commit and branch only.
+In the MLflow UI, coarse and exhaustive runs are told apart by `launch_id` and by the logged parameters `epochs_per_stage` (1 versus 5) and `train_fraction`.
+Adding the goal as a tag would need the goal to travel from the launch spec into `Launch`, which is out of scope here.
