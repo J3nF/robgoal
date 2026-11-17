@@ -252,7 +252,7 @@ def _plot_width_table(rows: list[WidthRow], choice: WidthChoice, plots_dir: Path
     colors = plotting_utils.get_colorcycle(len(families))
     markers = ["o", "s", "^"]
     styles = ["-", "--", ":"]
-    fig, axes = plt.subplots(1, 2, figsize=(6.5, 2.6), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.2), sharex=True)
     for family, color, marker, style in zip(families, colors, markers, styles):
         own = [row for row in rows if row.family == family]
         widths = np.array([row.width for row in own])
@@ -285,13 +285,17 @@ def _plot_width_table(rows: list[WidthRow], choice: WidthChoice, plots_dir: Path
         if choice.width:
             ax.axvline(choice.width, color="black", linewidth=0.8, alpha=0.6)
     axes[0].set_ylabel("final backward transfer D")
-    axes[1].set_ylabel("final avg accuracy (all classes)")
-    axes[0].set_ylim(min(-0.05, min(row.d_low for row in rows)) * 1.05, 0.05)
+    axes[1].set_ylabel("final avg accuracy")
+    axes[0].set_ylim(
+        min(-0.05, min(row.d_low for row in rows)) * 1.05,
+        max(0.05, max(row.d_high for row in rows)) * 1.05,
+    )
     axes[1].set_ylim(0, 1)
     fig.legend(*axes[0].get_legend_handles_labels(), loc="outside right center", frameon=False)
     fig.suptitle(
-        f"Size pilot (coarse: 1 epoch/stage), MNIST, {rows[0].num_seeds} seeds; mean and 95% t-interval; "
-        f"chosen W={choice.width}"
+        f"Size pilot (coarse, 1 epoch/stage), MNIST, {rows[0].num_seeds} seeds, "
+        f"mean and 95% t-interval, chosen W={choice.width}",
+        fontsize="small",
     )
     for suffix in ("png", "pdf"):
         plotting_utils.save_figure(fig, plots_dir / f"width_pilot.{suffix}", dpi=300)

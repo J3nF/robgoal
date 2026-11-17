@@ -263,3 +263,62 @@ class-incremental benchmark alongside MNIST, same 10-class/1x28x28 shape so
 nothing downstream needed to change. Non-`"mnist"` runs get their result
 filename/MLflow run name suffixed with the dataset name, so switching
 datasets never overwrites the other's results.
+
+## 2026-11-17: Incremental Inhibition Experiments Before the Meeting
+
+### Choosing the Network Width W
+
+Wish: one width $W$ for four equal hidden layers, where the ai2 effect is neither saturated nor floored.
+Pilot launch `2026-11-17-14-54_02ca940`: FCNN controls (T=1, both schemes) and matched CNN controls at $W \in \{2, 4, 8, 16, 32, 64, 128\}$, MNIST, 1 initial class, 1 class per stage, 5 seeds, 1 epoch per stage.
+The first attempt (`2026-11-17-14-47_6996f49`) was aborted because the working tree was edited during the launch; it is not used.
+
+Definition, fixed before the pilot ran (agent decision, unconfirmed; the researcher asked for a quantitative definition but did not fix one):
+
+- $D$ is the last value of `metrics.backward_transfer_over_time`: the mean over classes introduced before the last stage of the final accuracy minus the accuracy at the end of the introducing stage.
+- Interference is present at a width if the whole 95 % t-interval of $D$ over 5 seeds lies below $-0.05$.
+- Interference is absent if the whole interval lies above $-0.02$ and the seed-mean final accuracy is at least 0.8 (so a network that never learned does not count as robust).
+- Both FCNN activation schemes must agree; the CNN is reported only.
+
+Result (`results/plots/size_pilot/width_table.csv`, `width_pilot.png`):
+
+- `relu_sigmoid`: $D = -0.173$ at $W=2$ (present, accuracy 0.22), $-0.060$ at 4 and $-0.052$ at 8 (neither: the intervals reach above $-0.05$), $-0.014$ at 16, and $-0.000$ at 64 (absent, accuracy 0.96).
+- `sigmoid`: accuracy is 0.10 to 0.12 (chance) at every width, including 128, so $D$ is a floor effect and says nothing about capacity.
+- CNN: $D$ within about $\pm 0.04$ of 0 at every width, accuracy 0.93 to 0.98; the CNN never shows interference in this protocol.
+
+The pre-registered both-scheme rule therefore cannot be satisfied.
+Notice that the fallback is a choice, not the correct approach: the rule is applied to the schemes that reach accuracy 0.8 at some width, which is `relu_sigmoid` only.
+That gives $W_\text{low} = 2$, $W_\text{high} = 64$, geometric mean 11.3, rounded to a multiple of 4 gives $W = 12$.
+Uncertainty: the interval at $W = 4$ and $W = 8$ is wide (5 seeds), so $W_\text{low}$ is really "somewhere between 2 and 8" and $W$ could as well be 8 to 16 (p=70% that 12 sits in the transition region for `relu_sigmoid`).
+The pilot ran 1 epoch per stage; the exhaustive runs use 5, which probably moves the transition to smaller widths (?).
+The exhaustive launches report $D$ with its interval for the controls at $W = 12$, so that can be checked.
+
+Consequence for the sigmoid scheme: its controls are at chance at $W = 12$, and the unrolled gate and leaky variants will be at or below chance too.
+Those columns are kept because the researcher asked for both schemes, but they cannot show a robustness effect.
+
+### Metric Definitions in the Figures
+
+Newest-class curves use, per stage $s$, the accuracy on the classes introduced in stage $s$ after the last epoch of that stage, and `metrics.backward_transfer_over_time` read at the same epoch (mean over all classes introduced earlier; undefined in stage 0).
+This reading of "backward transfer computed at that stage" is an interpretation (agent decision, unconfirmed).
+
+### Leaky-Integrate Inhibition
+
+Proposed (agent decision, unconfirmed): for sample $i$ of the stream, $I_i = (1-\lambda)\sum_{k\ge1}\lambda^{k-1} a_{i-k}$ per neuron, with $a$ the activation signal of the *uninhibited* output (`sigmoid` output, or $\tanh(y/2)$ for `relu_sigmoid`), output $y\,(1 - w I_i)$, $w = 1$.
+The unrolled layer instead feeds back the previous step's *inhibited* output.
+Using the inhibited output here would make sample $i$ depend on the gated output of sample $i-1$, a sequential recursion that needs a Python loop over samples; the uninhibited signal allows one lower-triangular matrix product per batch.
+Notice that this makes the leaky and unrolled variants differ in two ways at once (signal and dynamics).
+The $(1-\lambda)$ factor keeps $I$ in $[0, 1)$, like the unrolled signal; without it $w = 1$ would make the gate negative.
+The state after a batch is carried to the next batch, detached; it is kept separately for training and evaluation, cleared at every stage start, and (evaluation state only) at the start of every evaluation pass.
+Inside a batch, gradients flow between samples (earlier samples' signals feed later ones).
+
+Primary $\lambda = 0.9$ (memory about 10 samples, so the signal is a smoothed population-activity estimate).
+With shuffled training batches neighbouring samples are random classes, so the layer cannot track the newest class specifically; the stage reset only matters for the first ~10 samples of a stage (p=85%).
+The mixed test set uses one fixed random order, so a test stream mixes MNIST and FashionMNIST like the training batches; evaluation still depends on test order and the fixed batch size 256.
+The exhaustive launches add $\lambda = 0.5$ and $0.99$ (at most two more, as agreed).
+
+### 20-Class Mixed Protocol
+
+MNIST digits are labels 0 to 9, FashionMNIST classes labels 10 to 19, each dataset normalised with its own mean and standard deviation (as `data.py` does).
+Notice the shortcut: a network can in principle tell the datasets apart from intensity statistics alone.
+Random class order per seed, recorded as `stage_digits` in each run's meta; all configs of a launch share the seeds, so every model sees the same orders.
+Coarse runs use 25 % of every stage's training examples, drawn once per seed.
+Because the order differs per seed, the seed-averaged heatmap by label blurs the introduction diagonal; a second heatmap orders each seed's classes by introduction rank.
