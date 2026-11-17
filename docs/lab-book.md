@@ -336,3 +336,42 @@ Exhaustive: 5 epochs per stage, all training examples, fashion_mnist, 1 initial 
 ### Code changes
 
 Launched from a detached worktree at the commit recorded here; code as in the coarse launches (LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan) plus figure and documentation changes.
+
+## 2026-11-17-17-28_ef03c45
+
+- **Started:** 2026-11-17T17:28:55+00:00
+- **Branch:** detached
+- **Commit:** ef03c454b43189709167b42623f1373173615ee1
+- **Scan:** incremental
+- **Planned runs:** 55
+- **Dataset:** mixed
+- **Seeds:** 5 random seeds per config
+- **Initial classes / classes per stage:** 1 / 1
+- **Workers:** 12
+- **MLflow:** on
+- **Results:** `results/2026-11-17-17-28_ef03c45/`
+
+Command:
+
+```sh
+python src/run_experiments.py --scan incremental --width 12 --leaky-decays 0.5 0.9 0.99 --dataset mixed --initial-classes 1 --classes-per-stage 1 --num-seeds 5 --epochs-per-stage 5 --split-seeds --workers 12 --goal 'Exhaustive run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.5, 0.9, 0.99) against FCNN and CNN controls, mixed, width 12, regenerating the coarse figures with full training.' --method 'Exhaustive: 5 epochs per stage, all training examples, mixed, 1 initial class and 1 class per stage in a random order per seed (20 stages), width 12 from the size pilot (four equal hidden layers), 11 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 6 leaky), 5 random seeds shared by all configs, every seed its own job.' --code-changes 'Launched from a detached worktree at the commit recorded here; code as in the coarse launches (LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan) plus figure and documentation changes.'
+```
+
+### Goal
+
+Exhaustive run, Steps 2-6: heatmaps, newest-class curves and per-layer inhibition of unrolled ai2_gate (T=5, weight 1) and leaky inhibition (lambda 0.5, 0.9, 0.99) against FCNN and CNN controls, mixed, width 12, regenerating the coarse figures with full training.
+
+### Method
+
+Exhaustive: 5 epochs per stage, all training examples, mixed, 1 initial class and 1 class per stage in a random order per seed (20 stages), width 12 from the size pilot (four equal hidden layers), 11 configs (CNN control with matched channels, 2 FCNN controls, 2 unrolled ai2_gate, 6 leaky), 5 random seeds shared by all configs, every seed its own job.
+
+### Code changes
+
+Launched from a detached worktree at the commit recorded here; code as in the coarse launches (LeakyLayer, mixed dataset, per-layer inhibition arrays, incremental scan) plus figure and documentation changes.
+
+### Outcome note (hand-written, 2026-11-17-17-28_ef03c45)
+
+The launch ended at about 20:12 UTC with exit status 1.
+MLflow raised "database is locked" in 7 of the 55 jobs (the first at 17:30), and the launcher then continued those jobs without MLflow, so the `.h5` files are the record for them.
+All 55 `.h5` files exist and each holds 100 epochs of per-class accuracy (20 stages × 5 epochs).
+Because of the non-zero exit, the chain script did not plot; the figures in `results/plots/exhaustive/*_mixed*` were made by hand with `src/plot_incremental.py`.

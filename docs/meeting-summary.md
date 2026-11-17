@@ -1,6 +1,6 @@
 # Meeting Summary: Incremental Autaptic-Inhibition Experiments
 
-Status: Phase 1 (coarse) is complete; the exhaustive launches for MNIST and FashionMNIST are finished and the mixed protocol (full data, 6 to 8 hours estimated) is still running (see "Phase 2" below).
+Status: Phase 1 (coarse) is complete; the exhaustive launches for MNIST and FashionMNIST are finished and the mixed protocol (full data) finished too (see "Phase 2" below).
 Setup: width 12, four equal hidden layers, class-incremental protocol with 1 initial class and 1 class per stage, 5 random seeds shared by all models of a launch, 1 epoch per stage.
 The mixed protocol additionally uses 25 % of every stage's training examples.
 Every figure title says "coarse"; paths are relative to the repository root.
@@ -56,6 +56,27 @@ Exhaustive FashionMNIST, launch `2026-11-17-16-44_ef03c45` (55 runs), same figur
 - The FCNN control's interval at W=12 straddles the "present" and "absent" thresholds of the pilot (−0.05 and −0.02), so at 5 epochs interference is neither clearly present nor absent, consistent with the width being in the transition region.
 - The positive backward transfer of the `sigmoid` control (+0.25) is an artefact of near-chance accuracy at introduction.
 
+Exhaustive mixed (20 classes, MNIST then FashionMNIST labels in a random order per seed), launch `2026-11-17-17-28_ef03c45` (55 runs, about 2 h 40 min), figures `results/plots/exhaustive/*_mixed*`:
+
+| Model (mixed, width 12, 5 seeds) | Final accuracy (mean) | Final backward transfer D (mean) |
+| --- | --- | --- |
+| CNN control | 0.932 | −0.026 |
+| FCNN control, `relu_sigmoid` | 0.865 | −0.039 |
+| Unrolled `ai2_gate`, `relu_sigmoid` | 0.868 | −0.045 |
+| Leaky λ=0.5 / 0.9 / 0.99, `relu_sigmoid` | 0.693 / 0.836 / 0.860 | −0.106 / −0.043 / −0.033 |
+| FCNN control, `sigmoid` | 0.798 | +0.276 |
+| Unrolled `ai2_gate`, `sigmoid` | 0.609 | +0.340 |
+| Leaky, `sigmoid` (all λ) | 0.050 (chance) | −0.21 |
+
+- With `relu_sigmoid`, the unrolled gate matches the FCNN control on accuracy (0.868 versus 0.865) and is not more robust (D −0.045 versus −0.039); the 5-seed spread was not computed for this table.
+- Leaky inhibition ends at or below the control, and only λ=0.99 comes close (0.860).
+- On 20 classes the `sigmoid` FCNN control and the unrolled gate do learn, but their positive D comes from low accuracy at introduction, as in the other launches.
+- The leaky `sigmoid` models stay at chance.
+- The mixed heatmaps are by class label and, in `heatmap_mixed_by_rank.*`, by introduction rank; the per-dataset normalisation could let a model separate the datasets by input statistics alone.
+- MLflow logging failed with "database is locked" in 7 of the 55 jobs, starting 17:30, because 12 workers wrote to one SQLite file.
+  The `.h5` files of all 55 runs exist and hold 100 epochs each (20 stages × 5 epochs), so the figures are complete.
+  The launcher exited with status 1 because of this, so the chain script did not plot automatically; I plotted by hand.
+
 ## What Was Run
 
 - Pilot: 7 widths × (2 FCNN controls + 1 CNN control) × 5 seeds, 1 epoch per stage, MNIST (105 runs).
@@ -66,4 +87,4 @@ Exhaustive FashionMNIST, launch `2026-11-17-16-44_ef03c45` (55 runs), same figur
 ## Next
 
 The plan and its red-team record are in `docs/exhaustive-plan.md`.
-The mixed exhaustive launch (full data) is estimated at 6 to 8 hours and is the last in the chain.
+The exhaustive chain is complete.
